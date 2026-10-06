@@ -2,6 +2,7 @@ package assets
 
 import (
 	_ "embed"
+	"runtime/debug"
 	"strings"
 )
 
@@ -26,13 +27,32 @@ func Logo() string {
 	return strings.ReplaceAll(logo, "{VERSION}", "v"+Version())
 }
 
-// Version returns the build-time injected version when present, otherwise the
+// Version returns the build-time injected version when present. Otherwise it
+// falls back to the module version recorded by `go install`, and finally to the
 // trimmed contents of VERSION.txt. A leading "v" is stripped so callers can
 // format it consistently.
 func Version() string {
 	v := strings.TrimSpace(version)
 	if v == "" {
+		v = buildVersion()
+	}
+	if v == "" {
 		v = strings.TrimSpace(versionRaw)
 	}
 	return strings.TrimPrefix(v, "v")
+}
+
+// buildVersion reports the module version stamped by the Go toolchain, which is
+// set when the binary was installed with `go install module@version`. Local
+// builds report "(devel)" and are ignored.
+func buildVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	v := strings.TrimSpace(info.Main.Version)
+	if v == "" || v == "(devel)" {
+		return ""
+	}
+	return v
 }

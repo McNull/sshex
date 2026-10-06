@@ -61,3 +61,20 @@ jobs:
             dist/sshex-*.zip
             dist/checksums.txt
           generate_release_notes: true
+
+  go-install:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Verify go install
+        env:
+          GOPROXY: direct
+          GOBIN: ${{ runner.temp }}/bin
+        run: |
+          go install github.com/mcnull/sshex@${GITHUB_REF_NAME}
+          "$GOBIN/sshex" --version

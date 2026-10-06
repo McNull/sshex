@@ -15,6 +15,22 @@ func TestVersion(t *testing.T) {
 	}
 }
 
+func TestVersionInjected(t *testing.T) {
+	orig := version
+	version = "v1.2.3"
+	t.Cleanup(func() { version = orig })
+
+	if got := Version(); got != "1.2.3" {
+		t.Fatalf("Version() = %q, want %q", got, "1.2.3")
+	}
+}
+
+func TestBuildVersionIgnoresDevel(t *testing.T) {
+	if got := buildVersion(); got == "(devel)" {
+		t.Fatalf("buildVersion() = %q, want empty for local builds", got)
+	}
+}
+
 func TestLogo(t *testing.T) {
 	logo := Logo()
 	if logo == "" {
