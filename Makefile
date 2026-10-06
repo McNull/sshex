@@ -1,7 +1,9 @@
 .PHONY: build install test test-integration fmt lint clean
 
+LDFLAGS := -s -w -buildid=
+
 build:
-	go build -o ./dist/sshex .
+	CGO_ENABLED=0 go build -trimpath -tags osusergo,netgo -ldflags "$(LDFLAGS)" -o ./dist/sshex .
 
 install: build
 	sudo cp ./dist/sshex /usr/bin/sshex
