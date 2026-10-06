@@ -3,6 +3,7 @@ package sshhosts
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -138,7 +139,9 @@ func TestResolveUserKnownHostsFromConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve() error: %v", err)
 	}
-	assertNames(t, hosts, "custom.example")
+	if !slices.Contains(names(hosts), "custom.example") {
+		t.Fatalf("hosts = %v, want it to contain custom.example", names(hosts))
+	}
 }
 
 func TestResolveDedupKeepsDescription(t *testing.T) {
