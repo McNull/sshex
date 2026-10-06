@@ -1,7 +1,10 @@
-.PHONY: build test test-integration fmt lint clean
+.PHONY: build install test test-integration fmt lint clean
 
 build:
 	go build -o ./dist/sshex .
+
+install: build
+	sudo cp ./dist/sshex /usr/bin/sshex
 
 test:
 	go test -race ./...
