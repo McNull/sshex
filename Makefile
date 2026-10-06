@@ -1,6 +1,7 @@
-.PHONY: build install test test-integration fmt lint clean
+.PHONY: build install test test-integration fmt lint clean release
 
-LDFLAGS := -s -w -buildid=
+VERSION ?=
+LDFLAGS := -s -w -buildid= -X github.com/mcnull/sshex/internal/assets.version=$(VERSION)
 
 build:
 	CGO_ENABLED=0 go build -trimpath -tags osusergo,netgo -ldflags "$(LDFLAGS)" -o ./dist/sshex .
@@ -23,3 +24,12 @@ lint:
 
 clean:
 	go clean
+
+release:
+	@test -n "$(VERSION)" || { echo "usage: make release VERSION=x.y.z"; exit 1; }
+	@echo "$(VERSION)" > internal/assets/VERSION.txt
+	git add internal/assets/VERSION.txt
+	git commit -m "chore(release): v$(VERSION)"
+	git tag -a "v$(VERSION)" -m "v$(VERSION)"
+	git push origin main
+	git push origin "v$(VERSION)"
