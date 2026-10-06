@@ -66,6 +66,57 @@ func resolveAddAlias(cmd *cobra.Command, args []string) (string, []string) {
 	return args[0], args
 }
 
+// commandVariable documents one template variable that can be used in a
+// predefined command and what it expands to.
+type commandVariable struct {
+	name string
+	desc string
+}
+
+// commandVariables is the single source of truth for the template variable
+// legend shared by the help texts and the interactive command editor.
+var commandVariables = []commandVariable{
+	{"${REMOTE_CWD}", "The remote working directory"},
+	{"${REMOTE_USER}", "The remote user"},
+	{"${REMOTE_HOST}", "The remote host (ssh alias)"},
+	{"${REMOTE_PORT}", "The remote port"},
+	{"${REMOTE_SESSION}", "The session id"},
+	{"${REMOTE_ORIGIN}", "The origin machine"},
+	{"${0}, ${1}...${10}", "Positional arguments (${0} is the command name)"},
+	{"${@}", "All positional arguments"},
+}
+
+// formatCommandVariablesHelp renders the template variable legend in two
+// aligned columns under the shared header. The header is indented by indent and
+// each variable line by indent plus two spaces.
+func formatCommandVariablesHelp(indent string) string {
+	width := 0
+	for _, v := range commandVariables {
+		if len(v.name) > width {
+			width = len(v.name)
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%sVariables available in a command template:\n", indent)
+	for _, v := range commandVariables {
+		fmt.Fprintf(&b, "%s  %-*s    %s\n", indent, width, v.name, v.desc)
+	}
+	return b.String()
+}
+
+const (
+	nameFieldHelp     = "The name used by sshex exec."
+	aliasFieldHelp    = "Optional shell alias installed in the remote shell for this command."
+	disabledFieldHelp = "A disabled command is listed but cannot be executed."
+)
+
+// commandFieldHelp describes the command field. It reuses the shared variable
+// legend so the editor and the help texts stay in sync.
+var commandFieldHelp = "The command line executed on the origin, interpreted by " +
+	"its shell.\nQuote it so the shell does not expand the template variables " +
+	"before sshex stores them.\n\n" +
+	formatCommandVariablesHelp("")
+
 var commandEditCmd = &cobra.Command{
 	Use:               "edit <name>",
 	Short:             "Edit a predefined command field by field",
@@ -80,25 +131,38 @@ var commandEditCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		commands, err := manager.List(cmd.Context())
+		if err != nil {
+			return err
+		}
+		nameValidator := commandNameValidator(commands, current.Name)
+		aliasValidator := commandAliasValidator(commands, current.Name)
 		p := newPrompter(cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		defer p.close()
 
-		name, err := p.field("name", current.Name)
+		name, err := p.field("name", nameFieldHelp, current.Name, true, nameValidator)
 		if err != nil {
 			return editPromptError(cmd, err)
 		}
-		command, err := p.field("command", current.Command)
+		p.separate()
+
+		command, err := p.field("command", commandFieldHelp, current.Command, true, requireCommand)
 		if err != nil {
 			return editPromptError(cmd, err)
 		}
-		alias, err := p.field("alias", current.Alias)
+		p.separate()
+
+		alias, err := p.field("alias", aliasFieldHelp, current.Alias, false, aliasValidator)
 		if err != nil {
 			return editPromptError(cmd, err)
 		}
-		disabled, err := p.boolean("disabled", current.Disabled)
+		p.separate()
+
+		disabled, err := p.boolean("disabled", disabledFieldHelp, current.Disabled)
 		if err != nil {
 			return editPromptError(cmd, err)
 		}
+		p.separate()
 
 		updated := model.Command{Name: name, Command: command, Alias: alias, Disabled: disabled}
 		if err := manager.Update(cmd.Context(), current.Name, updated); err != nil {
@@ -117,6 +181,46 @@ func editPromptError(cmd *cobra.Command, err error) error {
 		return nil
 	}
 	return err
+}
+
+// requireCommand rejects an empty command line.
+func requireCommand(value string) error {
+	if value == "" {
+		return errors.New("command is required")
+	}
+	return nil
+}
+
+// commandNameValidator rejects a name that is invalid or already used by another
+// command. The command being edited (self) is allowed to keep its own name.
+func commandNameValidator(commands []model.Command, self string) func(string) error {
+	return func(value string) error {
+		if err := service.ValidateName(value); err != nil {
+			return err
+		}
+		for _, command := range commands {
+			if command.Name == value && command.Name != self {
+				return fmt.Errorf("name %q is already in use", value)
+			}
+		}
+		return nil
+	}
+}
+
+// commandAliasValidator rejects an invalid alias or one already used by another
+// command. An alias may match its own command's name.
+func commandAliasValidator(commands []model.Command, self string) func(string) error {
+	return func(value string) error {
+		if err := service.ValidateAlias(value); err != nil {
+			return err
+		}
+		for _, command := range commands {
+			if command.Alias != "" && command.Alias == value && command.Name != self {
+				return fmt.Errorf("alias %q is already in use", value)
+			}
+		}
+		return nil
+	}
 }
 
 var commandRmCmd = &cobra.Command{

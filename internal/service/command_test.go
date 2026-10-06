@@ -159,6 +159,27 @@ func TestCommandServiceUpdate(t *testing.T) {
 	}
 }
 
+func TestCommandServiceUpdateClearsAlias(t *testing.T) {
+	ctx := context.Background()
+	svc, _, repo := newCommandService(t)
+	if err := svc.Add(ctx, "code", "code", "ed", false); err != nil {
+		t.Fatalf("Add() error: %v", err)
+	}
+	if err := svc.Update(ctx, "code", model.Command{Name: "code", Command: "code"}); err != nil {
+		t.Fatalf("Update(clear alias) error: %v", err)
+	}
+	updated, err := repo.Get(ctx, "code")
+	if err != nil {
+		t.Fatalf("Get() error: %v", err)
+	}
+	if updated.Alias != "" {
+		t.Fatalf("alias = %q, want empty", updated.Alias)
+	}
+	if err := svc.Update(ctx, "code", model.Command{Name: "", Command: "code"}); !errors.Is(err, errs.ErrInvalidInput) {
+		t.Fatalf("Update(empty name) error = %v, want ErrInvalidInput", err)
+	}
+}
+
 func TestCommandServiceOnChange(t *testing.T) {
 	ctx := context.Background()
 	repo := memory.NewCommandRepository()

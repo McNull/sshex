@@ -210,7 +210,7 @@ const serveHelp = `  Run the sshex service.
     -h, --help            Show this help message and exit
 `
 
-const execHelp = `  Execute a predefined command on the origin machine.
+const execHelpPrefix = `  Execute a predefined command on the origin machine.
 
   Usage:
     sshex exec [options] <command> [<args>...]
@@ -224,19 +224,14 @@ const execHelp = `  Execute a predefined command on the origin machine.
                           session.
     -h, --help            Show this help message and exit
 
-  Variables available in a command template:
-    ${REMOTE_CWD}         The remote working directory
-    ${REMOTE_USER}        The remote user
-    ${REMOTE_HOST}        The remote host (ssh alias)
-    ${REMOTE_PORT}        The remote port
-    ${REMOTE_SESSION}     The session id
-    ${REMOTE_ORIGIN}      The origin machine
-    ${0}, ${1}...${10}    Positional arguments (${0} is the command name)
-    ${@}                  All positional arguments
+`
 
+const execHelpSuffix = `
   Arguments that are explicit relative paths (., .., ./x, ../x, ~/x, ~) are
   expanded to absolute paths before they are bound to the template.
 `
+
+var execHelp = execHelpPrefix + formatCommandVariablesHelp("  ") + execHelpSuffix
 
 const commandHelp = `  Manage predefined commands.
 
@@ -256,7 +251,7 @@ const commandHelp = `  Manage predefined commands.
     -h, --help            Show this help message and exit
 `
 
-const commandAddHelp = `  Add a predefined command.
+const commandAddHelpPrefix = `  Add a predefined command.
 
   Usage:
     sshex command add [options] <name> <command>...
@@ -273,22 +268,23 @@ const commandAddHelp = `  Add a predefined command.
         --disabled        Add the command in a disabled state
     -h, --help            Show this help message and exit
 
-  Variables available in a command template:
-    ${REMOTE_CWD}         The remote working directory
-    ${REMOTE_USER}        The remote user
-    ${REMOTE_HOST}        The remote host (ssh alias)
-    ${REMOTE_PORT}        The remote port
-    ${REMOTE_SESSION}     The session id
-    ${REMOTE_ORIGIN}      The origin machine
-    ${0}, ${1}...${10}    Positional arguments (${0} is the command name)
-    ${@}                  All positional arguments
-
-  Examples:
-    $ sshex command add code 'code --folder-uri "vscode-remote://ssh-remote+${REMOTE_HOST}${@:-${REMOTE_CWD}}"'
-    $ sshex command add --alias code 'code --folder-uri "vscode-remote://ssh-remote+${REMOTE_HOST}"'
-    $ sshex command add --alias ed code 'code --folder-uri "vscode-remote://ssh-remote+${REMOTE_HOST}"'
-    $ sshex command add zed 'zed "ssh://${REMOTE_USER}@${REMOTE_HOST}${@:-${REMOTE_CWD}}"'
 `
+
+const commandAddHelpSuffix = `
+  Examples:
+
+    # Ping from origin to the remote host
+    $ sshex command add ping 'ping ${REMOTE_HOST}'
+    
+    # Start vscode using the optional directory argument as project
+    $ sshex command add --alias code 'code --folder-uri "vscode-remote://ssh-remote+${REMOTE_HOST}${@:-${REMOTE_CWD}}"'
+
+    # Start zed using the optional directory argument as project
+    $ sshex command add --alias zed 'zed "ssh://${REMOTE_USER}@${REMOTE_HOST}${@:-${REMOTE_CWD}}"'
+
+`
+
+var commandAddHelp = commandAddHelpPrefix + formatCommandVariablesHelp("  ") + commandAddHelpSuffix
 
 const commandEditHelp = `  Edit a predefined command field by field.
 
@@ -298,9 +294,12 @@ const commandEditHelp = `  Edit a predefined command field by field.
   Arguments:
     <name>                The name of the command to edit
 
-  Each field is shown with its current value; press Enter to keep it. The name
-  field can be changed to rename the command. The alias must be unique among
-  commands and is installed in the remote shell.
+  Each field is preceded by a short description and shown with its current
+  value; press Enter to keep it. The name field can be changed to rename the
+  command. The command field lists the available template variables. The name
+  and command are required; the name and alias must be unique among commands.
+  Leaving the alias empty clears it rather than keeping it. An invalid answer
+  is reported and the field is asked again.
 
   Options:
     -h, --help            Show this help message and exit

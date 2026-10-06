@@ -19,6 +19,8 @@ var errEditCancelled = errors.New("edit cancelled")
 // falls back to a plain "[current]" prompt so pipes and tests keep working.
 type prompter struct {
 	editor editor
+	out    io.Writer
+	errOut io.Writer
 }
 
 // editor abstracts reading a single line, either through a terminal line editor
@@ -33,28 +35,59 @@ type editor interface {
 func newPrompter(in io.Reader, out, errOut io.Writer) *prompter {
 	if isTerminal(in) {
 		if ed, err := newTerminalEditor(in, out, errOut); err == nil {
-			return &prompter{editor: ed}
+			return &prompter{editor: ed, out: out, errOut: errOut}
 		}
 	}
-	return &prompter{editor: &plainEditor{in: bufio.NewReader(in), out: out}}
+	return &prompter{editor: &plainEditor{in: bufio.NewReader(in), out: out}, out: out, errOut: errOut}
 }
 
-// field prompts for a string value. An empty answer keeps the current value.
-func (p *prompter) field(label, current string) (string, error) {
-	value, err := p.editor.readLine(label, current)
-	if err != nil {
-		return "", err
+// maxFieldAttempts bounds how many times a single field is re-prompted after a
+// validation failure, so a stream of invalid input terminates cleanly.
+const maxFieldAttempts = 3
+
+// field prompts for a string value and re-prompts the same field until the
+// answer passes validate. The description is printed once, before the first
+// prompt. An empty answer clears the value when the field is optional and is
+// rejected when it is required. After a rejected answer the next prompt is
+// pre-filled with what was attempted (empty if it was cleared) so the answer can
+// be corrected without the previous value being appended to.
+func (p *prompter) field(label, description, current string, required bool, validate func(string) error) (string, error) {
+	p.describe(description)
+	prefill := current
+	for attempt := 0; ; attempt++ {
+		value, err := p.editor.readLine(label, prefill)
+		if err != nil {
+			return "", err
+		}
+		value = strings.TrimSpace(value)
+		if value == "" && !required {
+			return "", nil
+		}
+		if err := validate(value); err != nil {
+			if attempt+1 >= maxFieldAttempts {
+				return "", err
+			}
+			p.reject(err)
+			prefill = value
+			continue
+		}
+		return value, nil
 	}
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return current, nil
+}
+
+// reject prints a validation message above the retried prompt without repeating
+// the field description.
+func (p *prompter) reject(err error) {
+	if p.errOut == nil {
+		return
 	}
-	return value, nil
+	fmt.Fprintln(p.errOut, err)
 }
 
 // boolean prompts for a yes/no value, keeping the current value on an empty
 // line or an unrecognized answer.
-func (p *prompter) boolean(label string, current bool) (bool, error) {
+func (p *prompter) boolean(label, description string, current bool) (bool, error) {
+	p.describe(description)
 	shown := "no"
 	if current {
 		shown = "yes"
@@ -73,6 +106,50 @@ func (p *prompter) boolean(label string, current bool) (bool, error) {
 	default:
 		return current, nil
 	}
+}
+
+// describe prints a field description above its prompt, one comment line per
+// non-empty line of text. Blank lines are preserved as bare comment lines. When
+// the output is a color terminal the description is dimmed so the editable
+// prompt stays in focus; otherwise it is printed as plain text.
+func (p *prompter) describe(description string) {
+	if p.out == nil {
+		return
+	}
+	color := isColorTerminal(p.out)
+	for _, line := range strings.Split(strings.TrimRight(description, "\n"), "\n") {
+		text := "#"
+		if line != "" {
+			text = "# " + line
+		}
+		fmt.Fprintln(p.out, dimmed(text, color))
+	}
+}
+
+// separate writes a blank line so the descriptions and prompts of consecutive
+// fields do not run together.
+func (p *prompter) separate() {
+	if p.out == nil {
+		return
+	}
+	fmt.Fprintln(p.out)
+}
+
+// dimStart and dimEnd wrap descriptions in faint bright black. Bright black
+// alone renders identically to the default foreground in some color themes, so
+// the faint attribute is added to guarantee the text is dimmer than the prompt;
+// every line is reset so the color never leaks into the readline prompt.
+const (
+	dimStart = "\x1b[2;92m"
+	dimEnd   = "\x1b[0m"
+)
+
+// dimmed wraps line in the dim color when color is true.
+func dimmed(line string, color bool) string {
+	if !color {
+		return line
+	}
+	return dimStart + line + dimEnd
 }
 
 func (p *prompter) close() error {
@@ -144,6 +221,7 @@ func (e *plainEditor) readLine(label, defaultValue string) (string, error) {
 	if err != nil && line == "" {
 		return "", err
 	}
+	fmt.Fprintln(e.out)
 	return strings.TrimSpace(line), nil
 }
 

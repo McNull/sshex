@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -105,10 +106,10 @@ func (s *CommandService) Get(ctx context.Context, name string) (model.Command, e
 }
 
 func (s *CommandService) Add(ctx context.Context, name, command, alias string, disabled bool) error {
-	if err := validateName(name); err != nil {
+	if err := wrapInvalid(ValidateName(name)); err != nil {
 		return err
 	}
-	if err := validateAlias(alias); err != nil {
+	if err := wrapInvalid(ValidateAlias(alias)); err != nil {
 		return err
 	}
 	if strings.TrimSpace(command) == "" {
@@ -124,10 +125,10 @@ func (s *CommandService) Add(ctx context.Context, name, command, alias string, d
 // Update replaces the command stored under name. The replacement may rename the
 // command when its Name differs from name.
 func (s *CommandService) Update(ctx context.Context, name string, command model.Command) error {
-	if err := validateName(command.Name); err != nil {
+	if err := wrapInvalid(ValidateName(command.Name)); err != nil {
 		return err
 	}
-	if err := validateAlias(command.Alias); err != nil {
+	if err := wrapInvalid(ValidateAlias(command.Alias)); err != nil {
 		return err
 	}
 	if strings.TrimSpace(command.Command) == "" {
@@ -157,23 +158,34 @@ func (s *CommandService) SetDisabled(ctx context.Context, name string, disabled 
 	return s.Update(ctx, name, command)
 }
 
-func validateName(name string) error {
+// wrapInvalid marks a validation failure as invalid input so callers and the
+// API can classify it. A nil error passes through unchanged.
+func wrapInvalid(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%w: %w", errs.ErrInvalidInput, err)
+}
+
+// ValidateName reports whether name is a valid command name. It returns a
+// user-facing error so interactive callers can show it directly.
+func ValidateName(name string) error {
 	if name == "" {
-		return fmt.Errorf("%w: name is required", errs.ErrInvalidInput)
+		return errors.New("name is required")
 	}
 	for _, r := range name {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
 		default:
-			return fmt.Errorf("%w: invalid command name %q", errs.ErrInvalidInput, name)
+			return fmt.Errorf("invalid command name %q", name)
 		}
 	}
 	return nil
 }
 
-// validateAlias accepts an empty alias (no alias) or a shell-safe name. It
+// ValidateAlias accepts an empty alias (no alias) or a shell-safe name. It
 // deliberately allows the reserved characters a shell alias may use.
-func validateAlias(alias string) error {
+func ValidateAlias(alias string) error {
 	if alias == "" {
 		return nil
 	}
@@ -181,7 +193,7 @@ func validateAlias(alias string) error {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
 		default:
-			return fmt.Errorf("%w: invalid alias %q", errs.ErrInvalidInput, alias)
+			return fmt.Errorf("invalid alias %q", alias)
 		}
 	}
 	return nil
