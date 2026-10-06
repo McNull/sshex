@@ -275,6 +275,9 @@ const commandAddHelpSuffix = `
 
     # Ping from origin to the remote host
     $ sshex command add ping 'ping ${REMOTE_HOST}'
+
+    # Portscan the remote host on a range of ports
+    $ sshex command add portscan 'nmap -p ${1} ${REMOTE_HOST}'
     
     # Start vscode using the optional directory argument as project
     $ sshex command add --alias code 'code --folder-uri "vscode-remote://ssh-remote+${REMOTE_HOST}${@:-${REMOTE_CWD}}"'
