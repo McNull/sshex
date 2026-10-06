@@ -10,6 +10,22 @@
 
 Convenient SSH wrapper to simplify adding tunnels and executing commands on the originating machine.
 
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/McNull/sshex/main/install.sh | sh
+```
+
+The script detects your OS and architecture, downloads the matching archive
+from the [latest release](https://github.com/McNull/sshex/releases/latest),
+verifies its SHA256 checksum and installs `sshex` into `/usr/local/bin`.
+
+Set `SSHEX_INSTALL_DIR` to install elsewhere, or pass a tag to pin a version:
+
+```sh
+SSHEX_INSTALL_DIR="$HOME/.local/bin" sh install.sh v0.3.1
+```
+
 ## Quick start
 
 ```sh
