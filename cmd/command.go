@@ -39,6 +39,9 @@ var commandAddCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if err := requireCommandEditable(manager); err != nil {
+			return err
+		}
 		if len(args) == 0 {
 			return addCommandInteractive(cmd, manager)
 		}
@@ -255,6 +258,9 @@ var commandEditCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if err := requireCommandEditable(manager); err != nil {
+			return err
+		}
 		current, err := manager.Get(cmd.Context(), args[0])
 		if err != nil {
 			return err
@@ -386,6 +392,9 @@ var commandRmCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if err := requireCommandEditable(manager); err != nil {
+			return err
+		}
 		if err := manager.Remove(cmd.Context(), args[0]); err != nil {
 			return err
 		}
@@ -464,6 +473,9 @@ func setCommandDisabled(cmd *cobra.Command, name string, disabled bool) error {
 	if err != nil {
 		return err
 	}
+	if err := requireCommandEditable(manager); err != nil {
+		return err
+	}
 	if err := manager.SetDisabled(cmd.Context(), name, disabled); err != nil {
 		return err
 	}
@@ -475,6 +487,10 @@ func setCommandDisabled(cmd *cobra.Command, name string, disabled bool) error {
 	return nil
 }
 
+// errCommandReadOnly is returned when a command mutation is attempted from a
+// remote sshex session, where command definitions are managed by the origin.
+var errCommandReadOnly = errors.New("commands cannot be edited from a remote sshex session")
+
 // commandManager abstracts command storage so the CLI can talk to the broker
 // when a session is live, or edit the local config directly otherwise.
 type commandManager interface {
@@ -484,10 +500,14 @@ type commandManager interface {
 	Update(ctx context.Context, name string, command model.Command) error
 	Remove(ctx context.Context, name string) error
 	SetDisabled(ctx context.Context, name string, disabled bool) error
+	// CanManage reports whether command definitions may be edited. It is false
+	// for a remote session, whose token lacks the commands capability.
+	CanManage() bool
 }
 
 type remoteCommands struct {
-	client *client.Client
+	client    *client.Client
+	canManage bool
 }
 
 func (r remoteCommands) List(ctx context.Context) ([]model.Command, error) {
@@ -516,11 +536,17 @@ func (r remoteCommands) Get(ctx context.Context, name string) (model.Command, er
 }
 
 func (r remoteCommands) Add(ctx context.Context, name, command, alias string, disabled bool) error {
+	if !r.canManage {
+		return errCommandReadOnly
+	}
 	_, err := r.client.AddCommand(ctx, name, command, alias, disabled)
 	return err
 }
 
 func (r remoteCommands) Update(ctx context.Context, name string, command model.Command) error {
+	if !r.canManage {
+		return errCommandReadOnly
+	}
 	_, err := r.client.UpdateCommand(ctx, name, api.UpdateCommandRequest{
 		Name:     command.Name,
 		Command:  command.Command,
@@ -531,12 +557,20 @@ func (r remoteCommands) Update(ctx context.Context, name string, command model.C
 }
 
 func (r remoteCommands) Remove(ctx context.Context, name string) error {
+	if !r.canManage {
+		return errCommandReadOnly
+	}
 	return r.client.RemoveCommand(ctx, name)
 }
 
 func (r remoteCommands) SetDisabled(ctx context.Context, name string, disabled bool) error {
+	if !r.canManage {
+		return errCommandReadOnly
+	}
 	return r.client.SetCommandDisabled(ctx, name, disabled)
 }
+
+func (r remoteCommands) CanManage() bool { return r.canManage }
 
 type localCommands struct {
 	commands *service.CommandService
@@ -566,17 +600,32 @@ func (l localCommands) SetDisabled(ctx context.Context, name string, disabled bo
 	return l.commands.SetDisabled(ctx, name, disabled)
 }
 
+func (l localCommands) CanManage() bool { return true }
+
 // resolveCommandManager prefers the broker when a live session is discoverable
 // so commands can be managed from a remote shell; otherwise it edits the local
-// config directly.
+// config directly. A discovered session that lacks the commands capability is a
+// remote session and is returned read-only.
 func resolveCommandManager() (commandManager, error) {
-	if c, err := controlClient(); err == nil {
-		return remoteCommands{client: c}, nil
+	if file, err := controlFile(); err == nil {
+		return remoteCommands{
+			client:    client.New(file),
+			canManage: file.Capabilities.Contains(model.CapabilityCommands),
+		}, nil
 	}
 	if application == nil || application.Commands == nil {
 		return nil, errors.New("command manager unavailable")
 	}
 	return localCommands{commands: application.Commands}, nil
+}
+
+// requireCommandEditable fails fast when command definitions may not be edited,
+// before any interactive prompt is shown.
+func requireCommandEditable(manager commandManager) error {
+	if !manager.CanManage() {
+		return errCommandReadOnly
+	}
+	return nil
 }
 
 func completeCommandNames(_ *cobra.Command, _ []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {

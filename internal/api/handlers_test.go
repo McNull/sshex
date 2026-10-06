@@ -19,7 +19,10 @@ import (
 	"github.com/mcnull/sshex/internal/sshx/openssh"
 )
 
-const testToken = "test-token"
+const (
+	testToken       = "test-token"
+	restrictedToken = "restricted-token"
+)
 
 func newTestRouter() http.Handler {
 	return newTestEnv().handler
@@ -40,7 +43,8 @@ func newTestEnv() testEnv {
 	transport := openssh.NewTransport()
 	installer := remoteinstall.NewLinuxInstaller()
 	auth := control.NewAuthenticator()
-	auth.Register(testToken, model.Capabilities{model.CapabilityTunnels, model.CapabilityExec}, "")
+	auth.Register(testToken, model.Capabilities{model.CapabilityTunnels, model.CapabilityExec, model.CapabilityCommands}, "")
+	auth.Register(restrictedToken, model.Capabilities{model.CapabilityTunnels, model.CapabilityExec}, "")
 	provider := unix.NewProvider("")
 	pool := sshx.NewPool()
 	ids := func() string { return "test-id" }
@@ -352,5 +356,42 @@ func TestCommandEndpointsRequireAuth(t *testing.T) {
 	rec := do(t, env.handler, http.MethodGet, "/commands", "", false)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+func doWithToken(t *testing.T, handler http.Handler, method, path, body, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestCommandMutationsRequireCommandsCapability(t *testing.T) {
+	env := newTestEnv()
+
+	if rec := doWithToken(t, env.handler, http.MethodGet, "/commands", "", restrictedToken); rec.Code != http.StatusOK {
+		t.Fatalf("list with restricted token status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	cases := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodPost, "/commands", `{"name":"code","command":"code"}`},
+		{http.MethodPut, "/commands/code", `{"name":"code","command":"code"}`},
+		{http.MethodDelete, "/commands/code", ""},
+		{http.MethodPost, "/commands/code/disable", ""},
+		{http.MethodPost, "/commands/code/enable", ""},
+	}
+	for _, tc := range cases {
+		rec := doWithToken(t, env.handler, tc.method, tc.path, tc.body, restrictedToken)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("%s %s with restricted token status = %d, want 401: %s", tc.method, tc.path, rec.Code, rec.Body.String())
+		}
 	}
 }

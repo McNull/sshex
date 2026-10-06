@@ -15,6 +15,7 @@ import (
 type fakeInstaller struct {
 	paths       remoteinstall.RemotePaths
 	uninstalled bool
+	written     sessionfile.File
 }
 
 func (f *fakeInstaller) RemotePaths(context.Context, remoteinstall.Runner) (remoteinstall.RemotePaths, error) {
@@ -25,7 +26,8 @@ func (f *fakeInstaller) Install(context.Context, remoteinstall.Runner, remoteins
 	return nil
 }
 
-func (f *fakeInstaller) WriteSession(context.Context, remoteinstall.Runner, remoteinstall.RemotePaths, sessionfile.File) error {
+func (f *fakeInstaller) WriteSession(_ context.Context, _ remoteinstall.Runner, _ remoteinstall.RemotePaths, file sessionfile.File) error {
+	f.written = file
 	return nil
 }
 

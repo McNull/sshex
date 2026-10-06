@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -13,6 +16,7 @@ import (
 	"github.com/mcnull/sshex/internal/model"
 	"github.com/mcnull/sshex/internal/repository"
 	"github.com/mcnull/sshex/internal/repository/memory"
+	"github.com/mcnull/sshex/internal/sessionfile"
 	"github.com/mcnull/sshex/internal/sshx"
 )
 
@@ -388,5 +392,65 @@ func TestRemoveConnectionKeepsSharedControllerMaster(t *testing.T) {
 	}
 	if !ctrl.closed {
 		t.Fatal("session teardown did not close the controller master")
+	}
+}
+
+func TestConnectIssuesRestrictedRemoteToken(t *testing.T) {
+	ctx := context.Background()
+	installer := &fakeInstaller{}
+	sessionRepo := memory.NewSessionRepository()
+	pool := sshx.NewPool()
+	auth := control.NewAuthenticator()
+	dir := t.TempDir()
+	svc := NewSessionService(SessionServiceConfig{
+		Sessions:    sessionRepo,
+		Connections: memory.NewConnectionRepository(),
+		Tunnels:     memory.NewTunnelRepository(),
+		Transport:   &fakeTransport{conn: &fakeConn{}},
+		Control:     unix.NewProvider(t.TempDir()),
+		Installer:   installer,
+		Auth:        auth,
+		IDs:         func() string { return "sess" },
+		Pool:        pool,
+		ControlDir:  t.TempDir(),
+		SessionDir:  dir,
+	})
+
+	session, _, err := svc.Connect(ctx, ConnectRequest{Host: "ssh02"})
+	if err != nil {
+		t.Fatalf("Connect() error: %v", err)
+	}
+
+	if installer.written.Token == "" || installer.written.Token == session.Token {
+		t.Fatalf("remote token = %q, local token = %q; want distinct non-empty", installer.written.Token, session.Token)
+	}
+	if installer.written.Capabilities.Contains(model.CapabilityCommands) {
+		t.Fatal("remote session file must not grant the commands capability")
+	}
+	if !session.Capabilities.Contains(model.CapabilityCommands) {
+		t.Fatal("origin session must grant the commands capability")
+	}
+	if session.RemoteToken != installer.written.Token {
+		t.Fatalf("session.RemoteToken = %q, want %q", session.RemoteToken, installer.written.Token)
+	}
+
+	local, err := sessionfile.Read(filepath.Join(dir, session.ID+".json"))
+	if err != nil {
+		t.Fatalf("read local session file: %v", err)
+	}
+	if local.Token != session.Token {
+		t.Fatalf("local token = %q, want %q", local.Token, session.Token)
+	}
+	if !local.Capabilities.Contains(model.CapabilityCommands) {
+		t.Fatal("local session file must grant the commands capability")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/commands", nil)
+	req.Header.Set("Authorization", "Bearer "+session.RemoteToken)
+	if err := auth.Authorize(req, model.CapabilityExec); err != nil {
+		t.Fatalf("remote token exec authorization failed: %v", err)
+	}
+	if err := auth.Authorize(req, model.CapabilityCommands); err == nil {
+		t.Fatal("remote token must not authorize command management")
 	}
 }

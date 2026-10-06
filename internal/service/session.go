@@ -207,6 +207,10 @@ func (s *SessionService) createSession(ctx context.Context, target sshx.Target, 
 	if err != nil {
 		return model.Session{}, err
 	}
+	remoteToken, err := control.GenerateToken()
+	if err != nil {
+		return model.Session{}, err
+	}
 
 	listener, err := s.control.Listen(ctx, id)
 	if err != nil {
@@ -256,12 +260,14 @@ func (s *SessionService) createSession(ctx context.Context, target sshx.Target, 
 	}
 
 	origin := config.Origin()
+	localCaps := model.Capabilities{model.CapabilityTunnels, model.CapabilityExec, model.CapabilityCommands}
+	remoteCaps := model.Capabilities{model.CapabilityTunnels, model.CapabilityExec}
 	remoteFile := sessionfile.File{
 		ID:           id,
 		Origin:       origin,
 		Endpoint:     model.Endpoint{Kind: model.EndpointUnix, Address: remoteSocket},
-		Token:        token,
-		Capabilities: model.Capabilities{model.CapabilityTunnels, model.CapabilityExec},
+		Token:        remoteToken,
+		Capabilities: remoteCaps,
 		Target:       target.String(),
 	}
 	if err := s.installer.WriteSession(ctx, conn, paths, remoteFile); err != nil {
@@ -278,7 +284,8 @@ func (s *SessionService) createSession(ctx context.Context, target sshx.Target, 
 		State:        model.SessionActive,
 		Endpoint:     listener.Endpoint(),
 		Token:        token,
-		Capabilities: model.Capabilities{model.CapabilityTunnels, model.CapabilityExec},
+		RemoteToken:  remoteToken,
+		Capabilities: localCaps,
 		ControlPath:  controlPath,
 		RemoteSocket: remoteSocket,
 		Shell:        string(shell),
@@ -291,13 +298,16 @@ func (s *SessionService) createSession(ctx context.Context, target sshx.Target, 
 	if s.sessionDir != "" {
 		localFile := remoteFile
 		localFile.Endpoint = listener.Endpoint()
+		localFile.Token = token
+		localFile.Capabilities = localCaps
 		if err := sessionfile.WriteLocal(s.sessionDir, localFile); err != nil {
 			_ = s.sessions.Delete(ctx, id)
 			return fail(err)
 		}
 	}
 
-	s.auth.Register(token, model.Capabilities{model.CapabilityTunnels, model.CapabilityExec}, "")
+	s.auth.Register(token, localCaps, "")
+	s.auth.Register(remoteToken, remoteCaps, "")
 	s.pool.SetController(id, conn)
 	s.setListener(id, listener)
 
@@ -613,6 +623,9 @@ func (s *SessionService) closeSession(ctx context.Context, session model.Session
 	}
 
 	s.auth.Revoke(session.Token)
+	if session.RemoteToken != "" {
+		s.auth.Revoke(session.RemoteToken)
+	}
 	if s.sessionDir != "" {
 		_ = sessionfile.RemoveLocal(s.sessionDir, session.ID)
 	}

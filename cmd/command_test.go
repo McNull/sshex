@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"strings"
@@ -372,5 +373,37 @@ func TestCommandAliasValidator(t *testing.T) {
 	}
 	if err := validate("x"); err != nil {
 		t.Fatalf("fresh alias rejected: %v", err)
+	}
+}
+
+func TestRemoteCommandsReadOnly(t *testing.T) {
+	manager := remoteCommands{canManage: false}
+	if manager.CanManage() {
+		t.Fatal("remoteCommands without the commands capability reports manageable")
+	}
+	ctx := context.Background()
+	if err := manager.Add(ctx, "code", "code", "", false); !errors.Is(err, errCommandReadOnly) {
+		t.Fatalf("Add() error = %v, want errCommandReadOnly", err)
+	}
+	if err := manager.Update(ctx, "code", model.Command{Name: "code"}); !errors.Is(err, errCommandReadOnly) {
+		t.Fatalf("Update() error = %v, want errCommandReadOnly", err)
+	}
+	if err := manager.Remove(ctx, "code"); !errors.Is(err, errCommandReadOnly) {
+		t.Fatalf("Remove() error = %v, want errCommandReadOnly", err)
+	}
+	if err := manager.SetDisabled(ctx, "code", true); !errors.Is(err, errCommandReadOnly) {
+		t.Fatalf("SetDisabled() error = %v, want errCommandReadOnly", err)
+	}
+	if err := requireCommandEditable(manager); !errors.Is(err, errCommandReadOnly) {
+		t.Fatalf("requireCommandEditable() error = %v, want errCommandReadOnly", err)
+	}
+}
+
+func TestLocalCommandsManageable(t *testing.T) {
+	if !(localCommands{}).CanManage() {
+		t.Fatal("localCommands reports not manageable")
+	}
+	if err := requireCommandEditable(localCommands{}); err != nil {
+		t.Fatalf("requireCommandEditable(localCommands) error = %v", err)
 	}
 }

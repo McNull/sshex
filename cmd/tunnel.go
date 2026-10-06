@@ -128,21 +128,31 @@ func discoverClient() (*client.Client, error) {
 	return client.New(file), nil
 }
 
-// controlClient returns a client for some live session, preferring the default
-// one. The broker's token authorizes every session of the origin, so any live
-// session file is enough to reach it.
-func controlClient() (*client.Client, error) {
+// controlFile returns a live session file for some session, preferring the
+// default one. The broker's token authorizes every session of the origin, so any
+// live session file is enough to reach it.
+func controlFile() (sessionfile.File, error) {
 	file, err := sessionfile.Discover()
 	if err == nil {
-		return client.New(file), nil
+		return file, nil
 	}
 	if errors.Is(err, sessionfile.ErrAmbiguous) {
 		active, listErr := sessionfile.ListActive()
 		if listErr == nil && len(active) > 0 {
-			return client.New(active[0]), nil
+			return active[0], nil
 		}
 	}
-	return nil, err
+	return sessionfile.File{}, err
+}
+
+// controlClient returns a client for some live session, preferring the default
+// one.
+func controlClient() (*client.Client, error) {
+	file, err := controlFile()
+	if err != nil {
+		return nil, err
+	}
+	return client.New(file), nil
 }
 
 // selectClient resolves a client for an explicit session id, or the default

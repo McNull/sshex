@@ -277,7 +277,7 @@ func (h *Handlers) ListCommands(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) CreateCommand(w http.ResponseWriter, r *http.Request) {
-	if !h.authorize(w, r, model.CapabilityExec, "") {
+	if !h.authorize(w, r, model.CapabilityCommands, "") {
 		return
 	}
 	var req CreateCommandRequest
@@ -297,7 +297,7 @@ func (h *Handlers) CreateCommand(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) UpdateCommand(w http.ResponseWriter, r *http.Request) {
-	if !h.authorize(w, r, model.CapabilityExec, "") {
+	if !h.authorize(w, r, model.CapabilityCommands, "") {
 		return
 	}
 	name := r.PathValue("name")
@@ -323,7 +323,7 @@ func (h *Handlers) UpdateCommand(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) DeleteCommand(w http.ResponseWriter, r *http.Request) {
-	if !h.authorize(w, r, model.CapabilityExec, "") {
+	if !h.authorize(w, r, model.CapabilityCommands, "") {
 		return
 	}
 	if err := h.services.Commands.Remove(r.Context(), r.PathValue("name")); err != nil {
@@ -342,7 +342,7 @@ func (h *Handlers) DisableCommand(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) setCommandDisabled(w http.ResponseWriter, r *http.Request, disabled bool) {
-	if !h.authorize(w, r, model.CapabilityExec, "") {
+	if !h.authorize(w, r, model.CapabilityCommands, "") {
 		return
 	}
 	if err := h.services.Commands.SetDisabled(r.Context(), r.PathValue("name"), disabled); err != nil {

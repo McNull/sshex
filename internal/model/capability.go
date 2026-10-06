@@ -3,13 +3,14 @@ package model
 type Capability string
 
 const (
-	CapabilityTunnels Capability = "tunnels"
-	CapabilityExec    Capability = "exec"
+	CapabilityTunnels  Capability = "tunnels"
+	CapabilityExec     Capability = "exec"
+	CapabilityCommands Capability = "commands"
 )
 
 func (c Capability) Valid() bool {
 	switch c {
-	case CapabilityTunnels, CapabilityExec:
+	case CapabilityTunnels, CapabilityExec, CapabilityCommands:
 		return true
 	default:
 		return false

@@ -25,15 +25,19 @@ const (
 )
 
 type Session struct {
-	ID           string
-	Origin       string
-	User         string
-	Host         string
-	Port         int
-	JumpHosts    string
-	State        SessionState
-	Endpoint     Endpoint
-	Token        string
+	ID        string
+	Origin    string
+	User      string
+	Host      string
+	Port      int
+	JumpHosts string
+	State     SessionState
+	Endpoint  Endpoint
+	Token     string
+	// RemoteToken authenticates the restricted client installed on the remote
+	// host. It grants tunnels and exec but not command management, so commands
+	// can only be edited from the origin.
+	RemoteToken  string
 	Capabilities Capabilities
 	ControlPath  string
 	RemoteSocket string

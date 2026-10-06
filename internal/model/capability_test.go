@@ -10,6 +10,7 @@ func TestCapabilityValid(t *testing.T) {
 	}{
 		{name: "tunnels", cap: CapabilityTunnels, want: true},
 		{name: "exec", cap: CapabilityExec, want: true},
+		{name: "commands", cap: CapabilityCommands, want: true},
 		{name: "empty", cap: Capability(""), want: false},
 		{name: "unknown", cap: Capability("admin"), want: false},
 	}
