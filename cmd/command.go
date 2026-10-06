@@ -30,17 +30,20 @@ var commandCmd = &cobra.Command{
 const aliasFromName = "__sshex_alias_from_name__"
 
 var commandAddCmd = &cobra.Command{
-	Use:               "add [--disabled] [--alias [<alias>]] <name> <command>...",
+	Use:               "add [--disabled] [--alias [<alias>]] [<name> <command>...]",
 	Short:             "Add a predefined command",
-	Args:              cobra.MinimumNArgs(2),
+	Args:              addCommandArgs,
 	ValidArgsFunction: completeCommandNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		disabled, _ := cmd.Flags().GetBool("disabled")
-		alias, args := resolveAddAlias(cmd, args)
 		manager, err := resolveCommandManager()
 		if err != nil {
 			return err
 		}
+		if len(args) == 0 {
+			return addCommandInteractive(cmd, manager)
+		}
+		disabled, _ := cmd.Flags().GetBool("disabled")
+		alias, args := resolveAddAlias(cmd, args)
 		name := args[0]
 		command := strings.Join(args[1:], " ")
 		if err := manager.Add(cmd.Context(), name, command, alias, disabled); err != nil {
@@ -50,6 +53,45 @@ var commandAddCmd = &cobra.Command{
 		printCommandHints(cmd.OutOrStdout(), name, alias != "")
 		return nil
 	},
+}
+
+// addCommandArgs accepts either no positional arguments, which opens the
+// interactive editor, or a name and a command (two or more), which adds the
+// command directly. A lone name has no command to store, so it is rejected.
+func addCommandArgs(_ *cobra.Command, args []string) error {
+	if len(args) == 0 || len(args) >= 2 {
+		return nil
+	}
+	return fmt.Errorf("requires at least 2 args when adding directly, or none to use the editor; received 1")
+}
+
+// addCommandInteractive opens the field-by-field editor for a new command. The
+// --alias and --disabled flags seed the editor's initial values; a bare --alias
+// seeds the alias with the name entered in the editor.
+func addCommandInteractive(cmd *cobra.Command, manager commandManager) error {
+	alias, _ := cmd.Flags().GetString("alias")
+	disabled, _ := cmd.Flags().GetBool("disabled")
+	commands, err := manager.List(cmd.Context())
+	if err != nil {
+		return err
+	}
+	opts := commandEditorOptions{
+		command:       model.Command{Disabled: disabled},
+		aliasFromName: alias == aliasFromName,
+	}
+	if alias != aliasFromName {
+		opts.command.Alias = alias
+	}
+	created, err := promptCommandFields(cmd, opts, commands)
+	if err != nil {
+		return promptCancelled(cmd, err, "add")
+	}
+	if err := manager.Add(cmd.Context(), created.Name, created.Command, created.Alias, created.Disabled); err != nil {
+		return err
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "command %q added\n", created.Name)
+	printCommandHints(cmd.OutOrStdout(), created.Name, created.Alias != "")
+	return nil
 }
 
 // printCommandHints reports how a command can be executed and, when its shell
@@ -221,36 +263,10 @@ var commandEditCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		nameValidator := commandNameValidator(commands, current.Name)
-		aliasValidator := commandAliasValidator(commands, current.Name)
-		p := newPrompter(cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
-		defer p.close()
-
-		name, err := p.field("name", nameFieldHelp, current.Name, true, nameValidator)
+		updated, err := promptCommandFields(cmd, commandEditorOptions{command: current}, commands)
 		if err != nil {
-			return editPromptError(cmd, err)
+			return promptCancelled(cmd, err, "edit")
 		}
-		p.separate()
-
-		command, err := p.field("command", commandFieldHelp, current.Command, true, requireCommand)
-		if err != nil {
-			return editPromptError(cmd, err)
-		}
-		p.separate()
-
-		alias, err := p.field("alias", aliasFieldHelp, current.Alias, false, aliasValidator)
-		if err != nil {
-			return editPromptError(cmd, err)
-		}
-		p.separate()
-
-		disabled, err := p.boolean("disabled", disabledFieldHelp, current.Disabled)
-		if err != nil {
-			return editPromptError(cmd, err)
-		}
-		p.separate()
-
-		updated := model.Command{Name: name, Command: command, Alias: alias, Disabled: disabled}
 		if err := manager.Update(cmd.Context(), current.Name, updated); err != nil {
 			return err
 		}
@@ -260,11 +276,61 @@ var commandEditCmd = &cobra.Command{
 	},
 }
 
-// editPromptError turns a cancelled edit into a clean, non-error exit and lets
-// any other prompt failure propagate.
-func editPromptError(cmd *cobra.Command, err error) error {
+// commandEditorOptions configures the interactive command editor. command holds
+// the initial value of each field; aliasFromName, when set, makes the alias
+// default to the name entered in the editor (used for a bare --alias).
+type commandEditorOptions struct {
+	command       model.Command
+	aliasFromName bool
+}
+
+// promptCommandFields asks for each command field in turn and returns the
+// edited command. The description of each field is printed once and the current
+// value is pre-filled. The command being edited (opts.command.Name) is allowed
+// to keep its own name and alias. It returns errEditCancelled when the user
+// aborts.
+func promptCommandFields(cmd *cobra.Command, opts commandEditorOptions, commands []model.Command) (model.Command, error) {
+	nameValidator := commandNameValidator(commands, opts.command.Name)
+	aliasValidator := commandAliasValidator(commands, opts.command.Name)
+	p := newPrompter(cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+	defer p.close()
+
+	name, err := p.field("name", nameFieldHelp, opts.command.Name, true, nameValidator)
+	if err != nil {
+		return model.Command{}, err
+	}
+	p.separate()
+
+	command, err := p.field("command", commandFieldHelp, opts.command.Command, true, requireCommand)
+	if err != nil {
+		return model.Command{}, err
+	}
+	p.separate()
+
+	aliasDefault := opts.command.Alias
+	if opts.aliasFromName {
+		aliasDefault = name
+	}
+	alias, err := p.field("alias", aliasFieldHelp, aliasDefault, false, aliasValidator)
+	if err != nil {
+		return model.Command{}, err
+	}
+	p.separate()
+
+	disabled, err := p.boolean("disabled", disabledFieldHelp, opts.command.Disabled)
+	if err != nil {
+		return model.Command{}, err
+	}
+	p.separate()
+
+	return model.Command{Name: name, Command: command, Alias: alias, Disabled: disabled}, nil
+}
+
+// promptCancelled turns a cancelled interactive edit into a clean, non-error
+// exit and lets any other prompt failure propagate.
+func promptCancelled(cmd *cobra.Command, err error, action string) error {
 	if errors.Is(err, errEditCancelled) {
-		fmt.Fprintln(cmd.OutOrStdout(), "edit cancelled")
+		fmt.Fprintf(cmd.OutOrStdout(), "%s cancelled\n", action)
 		return nil
 	}
 	return err

@@ -176,6 +176,85 @@ func TestCommandAddHasAliasFlag(t *testing.T) {
 	}
 }
 
+func TestCommandAddArgs(t *testing.T) {
+	cases := []struct {
+		args    []string
+		wantErr bool
+	}{
+		{nil, false},
+		{[]string{"name", "cmd"}, false},
+		{[]string{"name", "cmd", "arg"}, false},
+		{[]string{"name"}, true},
+	}
+	for _, tc := range cases {
+		err := commandAddCmd.Args(commandAddCmd, tc.args)
+		if (err != nil) != tc.wantErr {
+			t.Fatalf("Args(%v) error = %v, wantErr %v", tc.args, err, tc.wantErr)
+		}
+	}
+}
+
+// newPromptCommand builds a throwaway command whose prompts read from in.
+func newPromptCommand(in string) (*cobra.Command, *bytes.Buffer) {
+	out := &bytes.Buffer{}
+	cmd := &cobra.Command{Use: "add"}
+	cmd.SetIn(strings.NewReader(in))
+	cmd.SetOut(out)
+	cmd.SetErr(io.Discard)
+	return cmd, out
+}
+
+func TestPromptCommandFields(t *testing.T) {
+	cmd, _ := newPromptCommand("demo\nmy cmd\n\n\n")
+	got, err := promptCommandFields(cmd, commandEditorOptions{}, nil)
+	if err != nil {
+		t.Fatalf("promptCommandFields() error: %v", err)
+	}
+	want := model.Command{Name: "demo", Command: "my cmd"}
+	if got != want {
+		t.Fatalf("promptCommandFields() = %+v, want %+v", got, want)
+	}
+}
+
+func TestPromptCommandFieldsAliasFromName(t *testing.T) {
+	cmd, out := newPromptCommand("demo\nmy cmd\n\n\n")
+	if _, err := promptCommandFields(cmd, commandEditorOptions{aliasFromName: true}, nil); err != nil {
+		t.Fatalf("promptCommandFields() error: %v", err)
+	}
+	if !strings.Contains(out.String(), "alias [demo]") {
+		t.Fatalf("alias prompt does not default to the name:\n%s", out.String())
+	}
+}
+
+func TestPromptCommandFieldsPrefills(t *testing.T) {
+	cmd, out := newPromptCommand("code\ncode ${REMOTE_HOST}\ned\nyes\n")
+	initial := model.Command{Name: "code", Command: "code ${REMOTE_HOST}", Alias: "ed", Disabled: true}
+	if _, err := promptCommandFields(cmd, commandEditorOptions{command: initial}, []model.Command{initial}); err != nil {
+		t.Fatalf("promptCommandFields() error: %v", err)
+	}
+	for _, want := range []string{"name [code]", "command [code ${REMOTE_HOST}]", "alias [ed]", "disabled (yes/no) [yes]"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("prompt %q missing from:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestPromptCancelled(t *testing.T) {
+	var out bytes.Buffer
+	cmd := &cobra.Command{Use: "add"}
+	cmd.SetOut(&out)
+	if err := promptCancelled(cmd, errEditCancelled, "add"); err != nil {
+		t.Fatalf("promptCancelled() error: %v", err)
+	}
+	if !strings.Contains(out.String(), "add cancelled") {
+		t.Fatalf("output = %q, want cancellation message", out.String())
+	}
+	wantErr := errors.New("boom")
+	if err := promptCancelled(cmd, wantErr, "add"); !errors.Is(err, wantErr) {
+		t.Fatalf("promptCancelled() = %v, want %v", err, wantErr)
+	}
+}
+
 // parseAliasAdd parses add arguments through a throwaway command configured like
 // commandAddCmd, returning the resolved alias and positional arguments.
 func parseAliasAdd(t *testing.T, args ...string) (string, []string) {

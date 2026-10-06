@@ -254,13 +254,17 @@ const commandHelp = `  Manage predefined commands.
 const commandAddHelpPrefix = `  Add a predefined command.
 
   Usage:
-    sshex command add [options] <name> <command>...
+    sshex command add [options] [<name> <command>...]
 
   Arguments:
     <name>                The name used by sshex exec
     <command>             The command line executed on the origin. Quote it
                           with single quotes so the shell does not expand the
                           template variables before sshex stores them.
+
+  With no arguments, sshex opens the same field-by-field editor as
+  ` + "`sshex command edit`" + `, starting from empty values. The --alias and
+  --disabled options pre-fill the editor.
 
   Options:
         --alias [<alias>] Install a shell alias for the command on the remote.
