@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 	"text/tabwriter"
 
@@ -82,72 +80,43 @@ var commandEditCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		in := bufio.NewReader(cmd.InOrStdin())
-		out := cmd.OutOrStdout()
+		p := newPrompter(cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		defer p.close()
 
-		name, err := promptField(in, out, "name", current.Name)
+		name, err := p.field("name", current.Name)
 		if err != nil {
-			return err
+			return editPromptError(cmd, err)
 		}
-		command, err := promptField(in, out, "command", current.Command)
+		command, err := p.field("command", current.Command)
 		if err != nil {
-			return err
+			return editPromptError(cmd, err)
 		}
-		alias, err := promptField(in, out, "alias", current.Alias)
+		alias, err := p.field("alias", current.Alias)
 		if err != nil {
-			return err
+			return editPromptError(cmd, err)
 		}
-		disabled, err := promptBool(in, out, "disabled", current.Disabled)
+		disabled, err := p.boolean("disabled", current.Disabled)
 		if err != nil {
-			return err
+			return editPromptError(cmd, err)
 		}
 
 		updated := model.Command{Name: name, Command: command, Alias: alias, Disabled: disabled}
 		if err := manager.Update(cmd.Context(), current.Name, updated); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "command %q updated\n", updated.Name)
+		fmt.Fprintf(cmd.OutOrStdout(), "command %q updated\n", updated.Name)
 		return nil
 	},
 }
 
-// promptField prints the current value and reads a replacement from in. An empty
-// line keeps the current value.
-func promptField(in *bufio.Reader, out io.Writer, label, current string) (string, error) {
-	fmt.Fprintf(out, "%s [%s]: ", label, current)
-	line, err := in.ReadString('\n')
-	if err != nil && line == "" {
-		return "", err
+// editPromptError turns a cancelled edit into a clean, non-error exit and lets
+// any other prompt failure propagate.
+func editPromptError(cmd *cobra.Command, err error) error {
+	if errors.Is(err, errEditCancelled) {
+		fmt.Fprintln(cmd.OutOrStdout(), "edit cancelled")
+		return nil
 	}
-	value := strings.TrimSpace(line)
-	if value == "" {
-		return current, nil
-	}
-	return value, nil
-}
-
-// promptBool prompts for a yes/no value, keeping the current value on an empty
-// line or an unrecognized answer.
-func promptBool(in *bufio.Reader, out io.Writer, label string, current bool) (bool, error) {
-	shown := "no"
-	if current {
-		shown = "yes"
-	}
-	fmt.Fprintf(out, "%s (yes/no) [%s]: ", label, shown)
-	line, err := in.ReadString('\n')
-	if err != nil && line == "" {
-		return current, err
-	}
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "":
-		return current, nil
-	case "y", "yes", "true":
-		return true, nil
-	case "n", "no", "false":
-		return false, nil
-	default:
-		return current, nil
-	}
+	return err
 }
 
 var commandRmCmd = &cobra.Command{

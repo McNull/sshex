@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"bufio"
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
@@ -11,12 +11,13 @@ import (
 
 func TestPromptFieldKeepsEmpty(t *testing.T) {
 	var out bytes.Buffer
-	value, err := promptField(bufio.NewReader(strings.NewReader("\n")), &out, "name", "code")
+	p := newPrompter(strings.NewReader("\n"), &out, io.Discard)
+	value, err := p.field("name", "code")
 	if err != nil {
-		t.Fatalf("promptField() error: %v", err)
+		t.Fatalf("field() error: %v", err)
 	}
 	if value != "code" {
-		t.Fatalf("promptField() = %q, want code", value)
+		t.Fatalf("field() = %q, want code", value)
 	}
 	if !strings.Contains(out.String(), "name [code]") {
 		t.Fatalf("prompt = %q", out.String())
@@ -25,12 +26,13 @@ func TestPromptFieldKeepsEmpty(t *testing.T) {
 
 func TestPromptFieldReplaces(t *testing.T) {
 	var out bytes.Buffer
-	value, err := promptField(bufio.NewReader(strings.NewReader("editor\n")), &out, "name", "code")
+	p := newPrompter(strings.NewReader("editor\n"), &out, io.Discard)
+	value, err := p.field("name", "code")
 	if err != nil {
-		t.Fatalf("promptField() error: %v", err)
+		t.Fatalf("field() error: %v", err)
 	}
 	if value != "editor" {
-		t.Fatalf("promptField() = %q, want editor", value)
+		t.Fatalf("field() = %q, want editor", value)
 	}
 }
 
@@ -48,13 +50,21 @@ func TestPromptBool(t *testing.T) {
 	}
 	for _, tc := range cases {
 		var out bytes.Buffer
-		got, err := promptBool(bufio.NewReader(strings.NewReader(tc.in)), &out, "disabled", tc.current)
+		p := newPrompter(strings.NewReader(tc.in), &out, io.Discard)
+		got, err := p.boolean("disabled", tc.current)
 		if err != nil {
-			t.Fatalf("promptBool(%q) error: %v", tc.in, err)
+			t.Fatalf("boolean(%q) error: %v", tc.in, err)
 		}
 		if got != tc.want {
-			t.Fatalf("promptBool(%q, %v) = %v, want %v", tc.in, tc.current, got, tc.want)
+			t.Fatalf("boolean(%q, %v) = %v, want %v", tc.in, tc.current, got, tc.want)
 		}
+	}
+}
+
+func TestNewPrompterFallsBackWithoutTerminal(t *testing.T) {
+	p := newPrompter(strings.NewReader(""), io.Discard, io.Discard)
+	if _, ok := p.editor.(*plainEditor); !ok {
+		t.Fatalf("editor = %T, want *plainEditor", p.editor)
 	}
 }
 
