@@ -147,6 +147,19 @@ func TestCommandVariableLegendIsSingleSource(t *testing.T) {
 	}
 }
 
+func TestCommandExamplesAreSingleSource(t *testing.T) {
+	for _, e := range commandExamples {
+		for _, text := range []string{commandAddHelp, commandFieldHelp} {
+			if n := strings.Count(text, e.desc); n != 1 {
+				t.Fatalf("example description %q appears %d times, want 1, in:\n%s", e.desc, n, text)
+			}
+			if n := strings.Count(text, e.command); n != 1 {
+				t.Fatalf("example command %q appears %d times, want 1, in:\n%s", e.command, n, text)
+			}
+		}
+	}
+}
+
 func TestNewPrompterFallsBackWithoutTerminal(t *testing.T) {
 	p := newPrompter(strings.NewReader(""), io.Discard, io.Discard)
 	if _, ok := p.editor.(*plainEditor); !ok {
@@ -207,6 +220,29 @@ func TestResolveAddAlias(t *testing.T) {
 			}
 			if strings.Join(positionals[1:], " ") != tc.wantCommand {
 				t.Fatalf("command = %q, want %q", strings.Join(positionals[1:], " "), tc.wantCommand)
+			}
+		})
+	}
+}
+
+func TestPrintCommandHints(t *testing.T) {
+	cases := []struct {
+		name         string
+		aliasChanged bool
+	}{
+		{"with alias change", true},
+		{"without alias change", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			printCommandHints(&out, "code", tc.aliasChanged)
+			if !strings.Contains(out.String(), "Command can be executed with `sshex exec code`") {
+				t.Fatalf("output missing exec hint: %q", out.String())
+			}
+			restart := strings.Contains(out.String(), "Restart sshex sessions for the alias to take effect")
+			if restart != tc.aliasChanged {
+				t.Fatalf("restart hint present = %v, want %v: %q", restart, tc.aliasChanged, out.String())
 			}
 		})
 	}

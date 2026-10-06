@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"text/tabwriter"
 
@@ -46,8 +47,19 @@ var commandAddCmd = &cobra.Command{
 			return err
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "command %q added\n", name)
+		printCommandHints(cmd.OutOrStdout(), name, alias != "")
 		return nil
 	},
+}
+
+// printCommandHints reports how a command can be executed and, when its shell
+// alias was added or changed, that the sshex sessions must be restarted for the
+// alias to take effect.
+func printCommandHints(out io.Writer, name string, aliasChanged bool) {
+	fmt.Fprintf(out, "Command can be executed with `sshex exec %s`\n", name)
+	if aliasChanged {
+		fmt.Fprintln(out, "Restart sshex sessions for the alias to take effect")
+	}
 }
 
 // resolveAddAlias interprets the --alias flag. A bare `--alias` uses the command
@@ -86,6 +98,79 @@ var commandVariables = []commandVariable{
 	{"${@}", "All positional arguments"},
 }
 
+// commandExample documents one example command shared by the help texts and the
+// interactive command editor.
+type commandExample struct {
+	name    string // name used by sshex exec
+	alias   string // optional shell alias, empty when none
+	desc    string // short description
+	command string // the command template itself
+}
+
+// commandExamples is the single source of truth for the example commands shown
+// in the `command add` help text and the interactive command editor.
+var commandExamples = []commandExample{
+	{
+		name:    "ping",
+		desc:    "Ping from origin to the remote host",
+		command: "ping ${REMOTE_HOST}",
+	},
+	{
+		name:    "portscan",
+		desc:    "Portscan the remote host on a range of ports",
+		command: "nmap -p ${1} ${REMOTE_HOST}",
+	},
+	{
+		name:    "code",
+		alias:   "code",
+		desc:    "Start vscode using the optional directory argument as project",
+		command: `code --folder-uri "vscode-remote://ssh-remote+${REMOTE_HOST}${@:-${REMOTE_CWD}}"`,
+	},
+	{
+		name:    "zed",
+		alias:   "zed",
+		desc:    "Start zed using the optional directory argument as project",
+		command: `zed "ssh://${REMOTE_USER}@${REMOTE_HOST}${@:-${REMOTE_CWD}}"`,
+	},
+}
+
+// invocation renders the example as the arguments to `sshex command add`.
+// Because --alias has an optional value, a bare `--alias` leaves the alias and
+// name as positional tokens: when the alias equals the name one token serves
+// both, otherwise the alias is followed by the name.
+func (e commandExample) invocation() string {
+	switch {
+	case e.alias == "":
+		return fmt.Sprintf("%s '%s'", e.name, e.command)
+	case e.alias == e.name:
+		return fmt.Sprintf("--alias %s '%s'", e.name, e.command)
+	default:
+		return fmt.Sprintf("--alias %s %s '%s'", e.alias, e.name, e.command)
+	}
+}
+
+// formatCommandExamplesAdd renders the examples as full `sshex command add`
+// invocations for the add help text.
+func formatCommandExamplesAdd() string {
+	var b strings.Builder
+	b.WriteString("\n  Examples:\n")
+	for _, e := range commandExamples {
+		fmt.Fprintf(&b, "\n    # %s\n    $ sshex command add %s\n", e.desc, e.invocation())
+	}
+	return b.String()
+}
+
+// formatCommandExamplesEdit renders just the command template of each example
+// for the interactive editor, without the `sshex command add` wrapper.
+func formatCommandExamplesEdit() string {
+	var b strings.Builder
+	b.WriteString("Examples:\n")
+	for _, e := range commandExamples {
+		fmt.Fprintf(&b, "\n  %s\n    %s\n", e.desc, e.command)
+	}
+	return b.String()
+}
+
 // formatCommandVariablesHelp renders the template variable legend in two
 // aligned columns under the shared header. The header is indented by indent and
 // each variable line by indent plus two spaces.
@@ -115,7 +200,8 @@ const (
 var commandFieldHelp = "The command line executed on the origin, interpreted by " +
 	"its shell.\nQuote it so the shell does not expand the template variables " +
 	"before sshex stores them.\n\n" +
-	formatCommandVariablesHelp("")
+	formatCommandVariablesHelp("") + "\n" +
+	formatCommandExamplesEdit()
 
 var commandEditCmd = &cobra.Command{
 	Use:               "edit <name>",
@@ -169,6 +255,7 @@ var commandEditCmd = &cobra.Command{
 			return err
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "command %q updated\n", updated.Name)
+		printCommandHints(cmd.OutOrStdout(), updated.Name, updated.Alias != current.Alias)
 		return nil
 	},
 }

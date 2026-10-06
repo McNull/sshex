@@ -270,24 +270,7 @@ const commandAddHelpPrefix = `  Add a predefined command.
 
 `
 
-const commandAddHelpSuffix = `
-  Examples:
-
-    # Ping from origin to the remote host
-    $ sshex command add ping 'ping ${REMOTE_HOST}'
-
-    # Portscan the remote host on a range of ports
-    $ sshex command add portscan 'nmap -p ${1} ${REMOTE_HOST}'
-    
-    # Start vscode using the optional directory argument as project
-    $ sshex command add --alias code 'code --folder-uri "vscode-remote://ssh-remote+${REMOTE_HOST}${@:-${REMOTE_CWD}}"'
-
-    # Start zed using the optional directory argument as project
-    $ sshex command add --alias zed 'zed "ssh://${REMOTE_USER}@${REMOTE_HOST}${@:-${REMOTE_CWD}}"'
-
-`
-
-var commandAddHelp = commandAddHelpPrefix + formatCommandVariablesHelp("  ") + commandAddHelpSuffix
+var commandAddHelp = commandAddHelpPrefix + formatCommandVariablesHelp("  ") + formatCommandExamplesAdd()
 
 const commandEditHelp = `  Edit a predefined command field by field.
 
