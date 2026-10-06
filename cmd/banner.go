@@ -28,18 +28,7 @@ func showBanner(cmd *cobra.Command) bool {
 // isColorTerminal reports whether colors should be emitted to w. It is false
 // when NO_COLOR is set or w is not a character device.
 func isColorTerminal(w io.Writer) bool {
-	if os.Getenv("NO_COLOR") != "" {
-		return false
-	}
-	f, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
-	info, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeCharDevice != 0
+	return os.Getenv("NO_COLOR") == "" && isTerminalWriter(w)
 }
 
 func stripANSI(s string) string {

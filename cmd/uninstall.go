@@ -55,7 +55,9 @@ var uninstallCmd = &cobra.Command{
 			}
 		}
 
-		fmt.Fprintf(out, "uninstalling sshex from %s...\n", target)
+		sp := startSpinner(out, fmt.Sprintf("uninstalling sshex from %s...", target))
+		defer sp.Stop()
+
 		err := application.Installs.Uninstall(cmd.Context(), service.UninstallRequest{
 			User:         user,
 			Host:         host,
@@ -68,12 +70,13 @@ var uninstallCmd = &cobra.Command{
 		if err != nil {
 			var active *service.ActiveSessionsError
 			if errors.As(err, &active) {
+				sp.Stop()
 				printActiveSessions(out, active.Sessions)
 				return fmt.Errorf("aborting: sessions are still active; close them or re-run with --force")
 			}
 			return err
 		}
-		fmt.Fprintln(out, "done.")
+		sp.StopWith("✓ done.")
 		return nil
 	},
 }

@@ -32,7 +32,8 @@ var connectCmd = &cobra.Command{
 		noCompletions, _ := cmd.Flags().GetBool("no-completions")
 
 		out := cmd.OutOrStdout()
-		fmt.Fprintln(out, "installing remote sshex command...")
+		sp := startSpinner(out, "installing remote sshex command...")
+		defer func() { sp.Stop() }()
 
 		broker, err := daemon.Ensure(cmd.Context(), os.Getenv("SSHEX_CONFIG"))
 		if err != nil {
@@ -59,6 +60,11 @@ var connectCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		// Pause the spinner: OpenSSH may prompt on the terminal for host-key
+		// confirmation and authentication, and the animation would garble it.
+		sp.Stop()
+
 		master, err := application.Transport.Connect(cmd.Context(), target, sshx.ConnectOptions{
 			ControlPath: controlPath,
 			Stderr:      os.Stderr,
@@ -72,6 +78,8 @@ var connectCmd = &cobra.Command{
 				_ = master.Close(context.Background())
 			}
 		}()
+
+		sp = startSpinner(out, "installing remote sshex command...")
 
 		result, err := c.CreateSession(cmd.Context(), api.CreateSessionRequest{
 			User:                  user,
@@ -88,8 +96,7 @@ var connectCmd = &cobra.Command{
 			return err
 		}
 		adopted = true
-		fmt.Fprintln(out, "done.")
-		fmt.Fprintln(out)
+		sp.Stop()
 
 		session := result.Session
 		connection := result.Connection
