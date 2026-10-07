@@ -49,3 +49,17 @@ func TestShowBanner(t *testing.T) {
 		t.Error("showBanner(plain) = true, want false")
 	}
 }
+
+func TestShowBannerDemoMode(t *testing.T) {
+	orig := recordDemoMode
+	recordDemoMode = func() bool { return true }
+	t.Cleanup(func() { recordDemoMode = orig })
+
+	if showBanner(rootCmd) {
+		t.Error("showBanner(rootCmd) = true in demo mode, want false")
+	}
+	annotated := &cobra.Command{Annotations: map[string]string{bannerAnnotation: "true"}}
+	if showBanner(annotated) {
+		t.Error("showBanner(annotated) = true in demo mode, want false")
+	}
+}

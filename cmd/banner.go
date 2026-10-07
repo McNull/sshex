@@ -17,8 +17,12 @@ var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 // showBanner reports whether the banner should be printed for the command
 // being executed. It shows for a bare `sshex` invocation and for commands
-// explicitly marked as interactive via bannerAnnotation.
+// explicitly marked as interactive via bannerAnnotation. The banner is hidden
+// entirely in demo mode so recordings stay clean.
 func showBanner(cmd *cobra.Command) bool {
+	if recordDemoMode() {
+		return false
+	}
 	if cmd == rootCmd {
 		return true
 	}

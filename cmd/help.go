@@ -313,6 +313,7 @@ const commandListHelp = `  List predefined commands.
     sshex command list
 
   Options:
+    -s, --short           Hide the command column
     -h, --help            Show this help message and exit
 `
 

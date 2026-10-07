@@ -168,6 +168,110 @@ func TestNewPrompterFallsBackWithoutTerminal(t *testing.T) {
 	}
 }
 
+func TestParseDemoMode(t *testing.T) {
+	cases := []struct {
+		value string
+		want  bool
+	}{
+		{"1", true},
+		{"true", true},
+		{"TRUE", true},
+		{" yes ", true},
+		{"On", true},
+		{"0", false},
+		{"false", false},
+		{"no", false},
+		{"off", false},
+		{"", false},
+		{"maybe", false},
+	}
+	for _, tc := range cases {
+		if got := parseDemoMode(tc.value); got != tc.want {
+			t.Fatalf("parseDemoMode(%q) = %v, want %v", tc.value, got, tc.want)
+		}
+	}
+}
+
+func TestQuietPrompterSuppressesDescriptions(t *testing.T) {
+	var out bytes.Buffer
+	p := newPrompter(strings.NewReader("code\n"), &out, io.Discard)
+	p.quiet = true
+	if _, err := p.field("name", "The name used by sshex exec.", "", true, func(string) error { return nil }); err != nil {
+		t.Fatalf("field() error: %v", err)
+	}
+	p.separate()
+	got := out.String()
+	if strings.Contains(got, "#") {
+		t.Fatalf("quiet output contains a description:\n%s", got)
+	}
+	if strings.Contains(got, "\n\n") {
+		t.Fatalf("quiet output contains a blank separator:\n%s", got)
+	}
+	if !strings.Contains(got, "name []") {
+		t.Fatalf("quiet output missing prompt:\n%s", got)
+	}
+}
+
+func TestCommandListHasShortFlag(t *testing.T) {
+	flag := commandListCmd.Flags().Lookup("short")
+	if flag == nil {
+		t.Fatal("command list is missing the --short flag")
+	}
+	if flag.Shorthand != "s" {
+		t.Fatalf("command list --short shorthand = %q, want s", flag.Shorthand)
+	}
+}
+
+func TestWriteCommandTable(t *testing.T) {
+	commands := []model.Command{
+		{Name: "code", Command: "code ${REMOTE_HOST}", Alias: "ed"},
+		{Name: "logs", Command: "tail -f /var/log/syslog", Alias: "lg", Disabled: true},
+	}
+
+	cases := []struct {
+		name      string
+		short     bool
+		wantHead  string
+		wantCell  []string
+		forbidden string
+	}{
+		{
+			name:      "full",
+			short:     false,
+			wantHead:  "NAME",
+			wantCell:  []string{"COMMAND", "code ${REMOTE_HOST}", "tail -f /var/log/syslog"},
+			forbidden: "",
+		},
+		{
+			name:      "short",
+			short:     true,
+			wantHead:  "NAME",
+			wantCell:  []string{"ALIAS", "DISABLED", "ed", "lg"},
+			forbidden: "COMMAND",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			if err := writeCommandTable(&out, commands, tc.short); err != nil {
+				t.Fatalf("writeCommandTable() error: %v", err)
+			}
+			got := out.String()
+			if !strings.Contains(got, tc.wantHead) {
+				t.Fatalf("output missing %q:\n%s", tc.wantHead, got)
+			}
+			for _, cell := range tc.wantCell {
+				if !strings.Contains(got, cell) {
+					t.Fatalf("output missing %q:\n%s", cell, got)
+				}
+			}
+			if tc.forbidden != "" && strings.Contains(got, tc.forbidden) {
+				t.Fatalf("output should not contain %q:\n%s", tc.forbidden, got)
+			}
+		})
+	}
+}
+
 func TestCommandAddHasAliasFlag(t *testing.T) {
 	if commandAddCmd.Flags().Lookup("alias") == nil {
 		t.Fatal("command add is missing the --alias flag")
@@ -309,14 +413,22 @@ func TestPrintCommandHints(t *testing.T) {
 	cases := []struct {
 		name         string
 		aliasChanged bool
+		quiet        bool
 	}{
-		{"with alias change", true},
-		{"without alias change", false},
+		{"with alias change", true, false},
+		{"without alias change", false, false},
+		{"quiet", true, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer
-			printCommandHints(&out, "code", tc.aliasChanged)
+			printCommandHints(&out, "code", tc.aliasChanged, tc.quiet)
+			if tc.quiet {
+				if out.Len() != 0 {
+					t.Fatalf("quiet output = %q, want empty", out.String())
+				}
+				return
+			}
 			if !strings.Contains(out.String(), "Command can be executed with `sshex exec code`") {
 				t.Fatalf("output missing exec hint: %q", out.String())
 			}

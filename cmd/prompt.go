@@ -21,6 +21,9 @@ type prompter struct {
 	editor editor
 	out    io.Writer
 	errOut io.Writer
+	// quiet suppresses field descriptions and blank separators, leaving just
+	// the prompts for a clean recording.
+	quiet bool
 }
 
 // editor abstracts reading a single line, either through a terminal line editor
@@ -113,7 +116,7 @@ func (p *prompter) boolean(label, description string, current bool) (bool, error
 // the output is a color terminal the description is dimmed so the editable
 // prompt stays in focus; otherwise it is printed as plain text.
 func (p *prompter) describe(description string) {
-	if p.out == nil {
+	if p.quiet || p.out == nil {
 		return
 	}
 	color := isColorTerminal(p.out)
@@ -129,7 +132,7 @@ func (p *prompter) describe(description string) {
 // separate writes a blank line so the descriptions and prompts of consecutive
 // fields do not run together.
 func (p *prompter) separate() {
-	if p.out == nil {
+	if p.quiet || p.out == nil {
 		return
 	}
 	fmt.Fprintln(p.out)
