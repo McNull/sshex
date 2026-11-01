@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const uninstallDetails = `- the sshex command and the ~/.local/bin/sshex symlink
+const uninstallDetails = `- the sshex binary and the ~/.local/bin/sshex link
 - shell completions, shell aliases and their shell startup wiring (bash, zsh, fish)
 - session state and runtime sockets
 

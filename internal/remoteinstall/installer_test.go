@@ -4,7 +4,9 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -141,11 +143,68 @@ func TestUninstall(t *testing.T) {
 		paths.DistDir(),
 		paths.RunDir,
 		paths.DataDir,
+		paths.InstallDirRecordPath(),
 	} {
 		if !strings.Contains(cmd, want) {
 			t.Fatalf("Uninstall() command missing %q:\n%s", want, cmd)
 		}
 	}
+}
+
+func TestUninstallRemovesRecordedInstallDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uninstallScript requires a POSIX shell")
+	}
+
+	home := t.TempDir()
+	data := filepath.Join(home, ".local", "share", "sshex")
+	localBin := filepath.Join(home, ".local", "bin")
+	customBin := filepath.Join(home, "custom", "bin")
+	runDir := filepath.Join(home, "run")
+	for _, dir := range []string{filepath.Join(data, "bin"), localBin, customBin, runDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files := []string{
+		filepath.Join(customBin, "sshex"),
+		filepath.Join(localBin, "sshex"),
+		filepath.Join(data, "bin", "sshex"),
+	}
+	for _, file := range files {
+		if err := os.WriteFile(file, []byte("sshex"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths := RemotePaths{DataDir: data, RunDir: runDir}
+	if err := os.WriteFile(paths.InstallDirRecordPath(), []byte(customBin+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("sh", "-c", uninstallScript(paths))
+	cmd.Env = environmentWithoutHome(home)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("uninstallScript() error: %v\n%s", err, out)
+	}
+
+	for _, file := range files {
+		if _, err := os.Stat(file); !os.IsNotExist(err) {
+			t.Fatalf("%s still exists after uninstall (err=%v)", file, err)
+		}
+	}
+	if _, err := os.Stat(data); !os.IsNotExist(err) {
+		t.Fatalf("%s still exists after uninstall (err=%v)", data, err)
+	}
+}
+
+func environmentWithoutHome(home string) []string {
+	env := make([]string, 0, len(os.Environ())+1)
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "HOME=") {
+			env = append(env, entry)
+		}
+	}
+	return append(env, "HOME="+home)
 }
 
 func TestRemoteSocketPath(t *testing.T) {

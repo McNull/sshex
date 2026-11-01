@@ -80,13 +80,28 @@ func (i *PosixInstaller) Remove(ctx context.Context, conn Runner, paths RemotePa
 }
 
 func (i *PosixInstaller) Uninstall(ctx context.Context, conn Runner, paths RemotePaths) error {
-	script := `rm -f "$HOME/.local/bin/sshex"; ` +
-		`rm -rf ` + shellQuote(paths.BinDir()) + ` ` + shellQuote(paths.SessionsDir()) + ` ` + shellQuote(paths.CompletionsDir()) + ` ` + shellQuote(paths.DistDir()) + ` ` + shellQuote(paths.RunDir) + `; ` +
-		`rmdir ` + shellQuote(paths.DataDir) + ` 2>/dev/null || true`
-	if err := conn.Run(ctx, script, nil, nil, nil); err != nil {
+	if err := conn.Run(ctx, uninstallScript(paths), nil, nil, nil); err != nil {
 		return fmt.Errorf("uninstall remote sshex: %w", err)
 	}
 	return nil
+}
+
+// uninstallScript removes the ~/.local/bin link, the data directory and the
+// binary recorded by install.sh. The recorded binary is removed last so a
+// permission failure is reported without skipping the rest of the cleanup.
+func uninstallScript(paths RemotePaths) string {
+	record := shellQuote(paths.InstallDirRecordPath())
+	return `rm -f "$HOME/.local/bin/sshex"; ` +
+		`rm -rf ` + shellQuote(paths.BinDir()) + ` ` + shellQuote(paths.SessionsDir()) + ` ` + shellQuote(paths.CompletionsDir()) + ` ` + shellQuote(paths.DistDir()) + ` ` + shellQuote(paths.RunDir) + `; ` +
+		`status=0; ` +
+		`if [ -f ` + record + ` ]; then ` +
+		`install_dir=$(cat ` + record + `); ` +
+		`if [ -n "$install_dir" ]; then ` +
+		`if rm -f "$install_dir/sshex"; then rm -f ` + record + `; else status=1; fi; ` +
+		`else rm -f ` + record + `; fi; ` +
+		`fi; ` +
+		`rmdir ` + shellQuote(paths.DataDir) + ` 2>/dev/null || true; ` +
+		`[ "$status" -eq 0 ]`
 }
 
 func RemoteSocketPath(runDir, id string) string {

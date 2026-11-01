@@ -2,7 +2,10 @@
 set -eu
 
 REPO="McNull/sshex"
-INSTALL_DIR="${SSHEX_INSTALL_DIR:-/usr/local/bin}"
+INSTALL_DIR="${SSHEX_INSTALL_DIR:-$HOME/.local/bin}"
+DATA_DIR="${SSHEX_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/sshex}"
+COMPLETIONS_START="# >>> sshex completions >>>"
+COMPLETIONS_END="# <<< sshex completions <<<"
 
 usage() {
 	cat <<EOF
@@ -11,15 +14,16 @@ Usage: install.sh [VERSION]
 Downloads and installs the sshex binary from GitHub releases.
 
 Arguments:
-  VERSION              Release tag to install (e.g. v0.3.1). Defaults to latest.
+  VERSION                 Release tag to install (e.g. v0.3.1). Defaults to latest.
 
 Environment:
-  SSHEX_INSTALL_DIR    Directory to install into. Defaults to /usr/local/bin.
-  SSHEX_VERSION        Same as the VERSION argument.
+  SSHEX_INSTALL_DIR       Directory to install into. Defaults to \$HOME/.local/bin.
+  SSHEX_VERSION           Same as the VERSION argument.
+  SSHEX_NO_COMPLETIONS    Set to 1 to skip shell completion setup.
 
 Examples:
   curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | sh
-  SSHEX_INSTALL_DIR="\$HOME/.local/bin" ./install.sh v0.3.1
+  SSHEX_INSTALL_DIR="\$HOME/bin" ./install.sh v0.3.1
 EOF
 }
 
@@ -68,6 +72,119 @@ if ! command -v unzip >/dev/null 2>&1; then
 	echo "sshex: need 'unzip' to extract the release archive" >&2
 	exit 1
 fi
+
+# --- shell completion helpers --------------------------------------------
+
+detect_shell() {
+	shell="${SHELL:-}"
+	if [ -z "$shell" ] && command -v getent >/dev/null 2>&1; then
+		shell="$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7)"
+	fi
+	if [ -z "$shell" ] && command -v dscl >/dev/null 2>&1; then
+		shell="$(dscl . -read "$HOME" UserShell 2>/dev/null | awk '{ print $2; exit }')"
+	fi
+	[ -n "$shell" ] || return 1
+	basename "$shell"
+}
+
+install_managed_block() {
+	rc="$1"
+	block="$2"
+	touch "$rc" || return 1
+	tmp="${rc}.sshex-completions.$$"
+	if SSHEX_BLOCK="$block" awk -v start="$COMPLETIONS_START" -v end="$COMPLETIONS_END" '
+		$0 == start && !inside { inside = 1; buffer = $0 ORS; next }
+		inside {
+			buffer = buffer $0 ORS
+			if ($0 == end) {
+				inside = 0
+				buffer = ""
+				if (!replaced) {
+					printf "%s\n", ENVIRON["SSHEX_BLOCK"]
+					replaced = 1
+				}
+			}
+			next
+		}
+		{ print }
+		END {
+			if (inside) printf "%s", buffer
+			if (!replaced) printf "%s\n", ENVIRON["SSHEX_BLOCK"]
+		}
+	' "$rc" >"$tmp"; then
+		mv "$tmp" "$rc"
+	else
+		rm -f "$tmp"
+		return 1
+	fi
+}
+
+install_completions() {
+	shell="$(detect_shell)" || return 0
+	case "$shell" in
+	bash | zsh | fish) ;;
+	*)
+		echo "Note: no shell completions for ${shell}; skipping." >&2
+		return 0
+		;;
+	esac
+
+	umask 077
+	mkdir -p "$DATA_DIR/completions" || return 0
+	completion="$DATA_DIR/completions/sshex.$shell"
+	if ! "$INSTALL_DIR/sshex" completions "$shell" >"$completion"; then
+		echo "sshex: warning: could not generate ${shell} completions" >&2
+		rm -f "$completion"
+		return 0
+	fi
+
+	if [ "$shell" = fish ]; then
+		fish_dir="${XDG_CONFIG_HOME:-$HOME/.config}/fish/completions"
+		if mkdir -p "$fish_dir" && cp "$completion" "$fish_dir/sshex.fish"; then
+			echo "Installed fish completions."
+		else
+			echo "sshex: warning: could not install fish completions" >&2
+		fi
+		return 0
+	fi
+
+	if [ "$shell" = zsh ]; then
+		rc="${ZDOTDIR:-$HOME}/.zshrc"
+		block="$(cat <<'EOF'
+# >>> sshex completions >>>
+if ! typeset -f compdef >/dev/null 2>&1; then
+	autoload -Uz compinit && compinit -i
+fi
+sshex_completions="${SSHEX_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/sshex}/completions/sshex.zsh"
+if [ -f "$sshex_completions" ]; then . "$sshex_completions"; fi
+unset sshex_completions
+# <<< sshex completions <<<
+EOF
+)"
+	else
+		rc="$HOME/.bashrc"
+		block="$(cat <<'EOF'
+# >>> sshex completions >>>
+sshex_completions="${SSHEX_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/sshex}/completions/sshex.bash"
+if [ -f "$sshex_completions" ]; then . "$sshex_completions"; fi
+unset sshex_completions
+# <<< sshex completions <<<
+EOF
+)"
+	fi
+
+	if install_managed_block "$rc" "$block"; then
+		echo "Installed ${shell} completions in ${rc}."
+	else
+		echo "sshex: warning: could not update ${rc} for completions" >&2
+	fi
+}
+
+record_install_dir() {
+	umask 077
+	mkdir -p "$DATA_DIR" 2>/dev/null || return 0
+	printf '%s\n' "$INSTALL_DIR" > "$DATA_DIR/install-dir" 2>/dev/null || true
+}
 
 # --- download -------------------------------------------------------------
 
@@ -127,6 +244,18 @@ else
 fi
 
 echo "Installed $("$INSTALL_DIR/sshex" --version 2>/dev/null || echo sshex)."
+
+record_install_dir
+
+if [ "${SSHEX_NO_COMPLETIONS:-}" = "1" ]; then
+	echo "Skipping shell completions."
+else
+	install_completions
+fi
+
+if [ "$INSTALL_DIR" != "/usr/local/bin" ] && [ -x /usr/local/bin/sshex ]; then
+	echo "Note: an older sshex exists at /usr/local/bin/sshex; remove it with: sudo rm /usr/local/bin/sshex" >&2
+fi
 
 case ":${PATH}:" in
 *":${INSTALL_DIR}:"*) ;;

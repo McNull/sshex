@@ -24,6 +24,9 @@ Or download a release binary:
 curl -fsSL https://raw.githubusercontent.com/McNull/sshex/main/install.sh | sh
 ```
 
+The installer places the binary in `~/.local/bin` and sets up shell completions
+for the detected shell. Set `SSHEX_NO_COMPLETIONS=1` to skip the completions.
+
 ## Quick start
 
 ```sh

@@ -23,6 +23,10 @@ func (p RemotePaths) SessionsDir() string    { return path.Join(p.DataDir, "sess
 func (p RemotePaths) CompletionsDir() string { return path.Join(p.DataDir, "completions") }
 func (p RemotePaths) DistDir() string        { return path.Join(p.DataDir, "dist") }
 
+// InstallDirRecordPath stores the directory install.sh placed the binary in.
+// Remote installs keep only the ~/.local/bin symlink, so the record is optional.
+func (p RemotePaths) InstallDirRecordPath() string { return path.Join(p.DataDir, "install-dir") }
+
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
