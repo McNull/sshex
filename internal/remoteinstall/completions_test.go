@@ -63,8 +63,6 @@ func TestInstallCompletions(t *testing.T) {
 		for _, want := range []string{
 			`"` + paths.BinPath() + `" completions ` + string(shell),
 			paths.CompletionsDir() + `/sshex.` + string(shell),
-			completionsMarker,
-			paths.BinDir(),
 		} {
 			if !strings.Contains(cmd, want) {
 				t.Fatalf("Install(%s) command missing %q:\n%s", shell, want, cmd)
@@ -72,24 +70,21 @@ func TestInstallCompletions(t *testing.T) {
 		}
 	}
 }
-
 func TestInstallCompletionsWiring(t *testing.T) {
 	paths := RemotePaths{DataDir: "/home/tester/.local/share/sshex", RunDir: "/run/user/1000/sshex"}
-	cases := map[Shell]string{
-		ShellBash: ".bashrc",
-		ShellZsh:  ".zshrc",
-		ShellFish: `}/fish"/completions`,
-	}
-	for shell, wantPath := range cases {
+	for _, shell := range []Shell{ShellBash, ShellZsh, ShellFish} {
 		script, err := completionInstallScript(paths, shell)
 		if err != nil {
 			t.Fatalf("completionInstallScript(%s) error: %v", shell, err)
 		}
-		if !strings.Contains(script, wantPath) {
-			t.Fatalf("completionInstallScript(%s) missing %q:\n%s", shell, wantPath, script)
+		if shell == ShellFish {
+			if !strings.Contains(script, "if test -n") || strings.Contains(script, "init.bash") {
+				t.Fatalf("fish completion wiring changed unexpectedly:\n%s", script)
+			}
+			continue
 		}
-		if strings.Count(script, completionsMarker) != 1 {
-			t.Fatalf("completionInstallScript(%s) marker count = %d, want 1", shell, strings.Count(script, completionsMarker))
+		if !strings.Contains(script, initPath(paths)) || !strings.Contains(script, initHookLine()) {
+			t.Fatalf("completion install missing shared init wiring:\n%s", script)
 		}
 	}
 }
@@ -111,6 +106,8 @@ func TestCompletionUninstallScript(t *testing.T) {
 		`${XDG_CONFIG_HOME:-$HOME/.config}/fish`,
 		"conf.d/sshex.fish",
 		"completions/sshex.fish",
+		initMarker,
+		"init.bash",
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("completionUninstallScript() missing %q:\n%s", want, script)
@@ -124,7 +121,7 @@ func TestUninstallCompletionsRunsScript(t *testing.T) {
 	if err := NewLinuxCompletionsInstaller().Uninstall(context.Background(), conn, paths); err != nil {
 		t.Fatalf("Uninstall() error: %v", err)
 	}
-	if len(conn.commands) != 1 || !strings.Contains(conn.commands[0], completionsMarker) {
+	if len(conn.commands) != 1 || !strings.Contains(conn.commands[0], initMarker) {
 		t.Fatalf("Uninstall() commands = %v", conn.commands)
 	}
 }

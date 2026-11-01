@@ -46,9 +46,8 @@ func (i *LinuxAliasInstaller) Uninstall(ctx context.Context, conn Runner, paths 
 	return nil
 }
 
-// aliasInstallScript writes the alias file for shell and wires it into the
-// shell startup files. It is idempotent: rerunning rewrites the alias file and
-// leaves the startup wiring untouched.
+// aliasInstallScript writes the generated alias file and shared session init.
+// Repeated installs replace only complete managed blocks and the managed hook line.
 func aliasInstallScript(paths RemotePaths, shell Shell, aliases []Alias) (string, error) {
 	if _, ok := parseShell(string(shell)); !ok {
 		return "", fmt.Errorf("unsupported shell: %q", shell)
@@ -57,7 +56,14 @@ func aliasInstallScript(paths RemotePaths, shell Shell, aliases []Alias) (string
 	content := aliasContent(shell, aliases)
 	write := `umask 077; mkdir -p ` + shellQuote(paths.DataDir) + `; ` +
 		`cat > ` + shellQuote(dest) + "<<'SSHEX_ALIASES'\n" + content + "SSHEX_ALIASES\n"
-	return write + aliasWiringScript(paths, shell), nil
+	if shell == ShellFish {
+		return write + aliasWiringScript(paths, shell), nil
+	}
+	rc := `"$HOME/.bashrc"`
+	if shell == ShellZsh {
+		rc = `"${ZDOTDIR:-$HOME}/.zshrc"`
+	}
+	return write + initWriteScript(paths) + initWiringScript(rc), nil
 }
 
 func aliasContent(shell Shell, aliases []Alias) string {
@@ -68,57 +74,41 @@ func aliasContent(shell Shell, aliases []Alias) string {
 		}
 		target := "sshex exec " + shellQuote(alias.Command)
 		if shell == ShellFish {
-			b.WriteString("alias " + alias.Name + " " + shellQuote(target) + "\n")
+			b.WriteString("functions -q " + alias.Name + "; or alias " + alias.Name + " " + shellQuote(target) + "\n")
 			continue
 		}
-		b.WriteString("alias " + alias.Name + "=" + shellQuote(target) + "\n")
+		b.WriteString("if ! alias " + alias.Name + " >/dev/null 2>&1 && ! typeset -f " + alias.Name + " >/dev/null 2>&1; then alias " + alias.Name + "=" + shellQuote(target) + "; fi\n")
 	}
 	return b.String()
 }
 
-// aliasWiringScript appends a marker block that sources the alias file to the
-// appropriate shell startup file. The block is only added once.
+// aliasWiringScript installs fish's native startup hook.
 func aliasWiringScript(paths RemotePaths, shell Shell) string {
-	source := dataExpr + `/aliases.` + string(shell)
-	block := `'` + aliasesMarker + `' ` +
-		`'[ -f "` + source + `" ] && . "` + source + `"' ` +
-		`'# <<< sshex aliases <<<'`
-
-	switch shell {
-	case ShellBash:
-		return `rc="$HOME/.bashrc"; touch "$rc"; ` +
-			`if ! grep -q '` + aliasesMarker + `' "$rc" 2>/dev/null; then ` +
-			`printf '%s\n' ` + block + ` >> "$rc"; fi`
-	case ShellZsh:
-		return `rc="${ZDOTDIR:-$HOME}/.zshrc"; touch "$rc"; ` +
-			`if ! grep -q '` + aliasesMarker + `' "$rc" 2>/dev/null; then ` +
-			`printf '%s\n' ` + block + ` >> "$rc"; fi`
-	case ShellFish:
-		configDir := `"${XDG_CONFIG_HOME:-$HOME/.config}/fish"`
-		fishBlock := `'` + aliasesMarker + `' ` +
-			`'test -f ` + source + `; and source ` + source + `' ` +
-			`'# <<< sshex aliases <<<'`
-		return `mkdir -p ` + configDir + `/conf.d; ` +
-			`rc=` + configDir + `/conf.d/sshex.fish; touch "$rc"; ` +
-			`if ! grep -q '` + aliasesMarker + `' "$rc" 2>/dev/null; then ` +
-			`printf '%s\n' ` + fishBlock + ` >> "$rc"; fi`
-	default:
+	if shell != ShellFish {
 		return ""
 	}
+	configDir := `"${XDG_CONFIG_HOME:-$HOME/.config}/fish"`
+	fishSource := paths.AliasPath(string(shell))
+	block := aliasesMarker + `
+if test -n "$SSHEX_SESSION"
+    set alias_file "` + fishSource + `"
+    test -f "$alias_file"; and source "$alias_file"
+end
+# <<< sshex aliases <<<`
+	return `mkdir -p ` + configDir + `/conf.d; rc=` + configDir + `/conf.d/sshex.fish; touch "$rc"; ` +
+		replaceManagedBlockScript(`"$rc"`, aliasesMarker, "# <<< sshex aliases <<<", block)
 }
 
-// aliasUninstallScript removes the startup wiring added by aliasWiringScript
-// and the generated alias files. It is safe to run more than once.
+// aliasUninstallScript removes managed startup hooks and generated aliases.
+// It is safe to run repeatedly and with missing files.
 func aliasUninstallScript() string {
 	fishConfigDir := `"${XDG_CONFIG_HOME:-$HOME/.config}/fish"`
-	removeBlock := `for rc in "$HOME/.bashrc" "${ZDOTDIR:-$HOME}/.zshrc" ` + fishConfigDir + `/conf.d/sshex.fish; do ` +
+	removeBlocks := `fish_rc=` + fishConfigDir + `/conf.d/sshex.fish; for rc in "$HOME/.bashrc" "${ZDOTDIR:-$HOME}/.zshrc" "$fish_rc"; do ` +
 		`[ -f "$rc" ] || continue; ` +
-		`grep -q '` + aliasesMarker + `' "$rc" 2>/dev/null || continue; ` +
-		`tmp="$rc.sshex-alias.tmp"; ` +
-		`sed '/` + aliasesMarker + `/,/# <<< sshex aliases <<</d' "$rc" > "$tmp" && mv "$tmp" "$rc"; ` +
-		`done`
-	removeFiles := `rm -f ` + dataExpr + `/aliases.bash ` + dataExpr + `/aliases.zsh ` + dataExpr + `/aliases.fish`
-	return removeBlock + `; ` + removeFiles
+		removeManagedBlockScript(`"$rc"`, aliasesMarker, "# <<< sshex aliases <<<") + `; ` +
+		`[ -s "$rc" ] || case "$rc" in */conf.d/sshex.fish) rm -f "$rc";; esac; ` +
+		`done; rm -f "` + dataExpr + `/aliases.bash" "` + dataExpr + `/aliases.zsh" "` + dataExpr + `/aliases.fish"`
+	return removeBlocks + `; ` + initUninstallScript()
 }
 
 // AliasPath returns the on-disk location of the alias file for shell.

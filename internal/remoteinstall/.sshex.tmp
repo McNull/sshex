@@ -1,0 +1,6 @@
+# >>> sshex completions >>>
+if [ -n "$SSHEX_SESSION" ]; then
+    export PATH="${SSHEX_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/sshex}/bin:$PATH"
+    [ -f "${SSHEX_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/sshex}/completions/sshex.bash" ] && . "${SSHEX_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/sshex}/completions/sshex.bash"
+fi
+# <<< sshex completions <<<
