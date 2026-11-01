@@ -41,6 +41,20 @@ func (d *fakeDownloader) Download(_ context.Context, plat Platform, dst string) 
 	return writeBinary(dst, []byte("#!/bin/sh\necho "+assets.Version()+"\n"))
 }
 
+// crossPlatform returns a supported platform that differs from the machine
+// running the tests, so Resolve takes the cache/builder/downloader path on
+// every runner (CI is linux/amd64, developers may be on darwin/arm64).
+func crossPlatform(t *testing.T) Platform {
+	t.Helper()
+	for _, plat := range SupportedPlatforms {
+		if !plat.IsLocal() {
+			return plat
+		}
+	}
+	t.Fatalf("no supported platform differs from %s/%s", runtime.GOOS, runtime.GOARCH)
+	return Platform{}
+}
+
 func TestResolveSamePlatformUsesExecutable(t *testing.T) {
 	builder := &fakeBuilder{err: errors.New("must not build")}
 	store := NewBinaryStore(builder, nil)
@@ -57,7 +71,7 @@ func TestResolveBuildsIntoCache(t *testing.T) {
 	t.Setenv("SSHEX_HOME", t.TempDir())
 	builder := &fakeBuilder{}
 	store := NewBinaryStore(builder, nil)
-	plat := Platform{OS: "linux", Arch: "amd64"}
+	plat := crossPlatform(t)
 	path, err := store.Resolve(context.Background(), plat)
 	if err != nil {
 		t.Fatalf("Resolve() error: %v", err)
@@ -75,7 +89,7 @@ func TestResolveReusesCachedVersion(t *testing.T) {
 	t.Setenv("SSHEX_HOME", t.TempDir())
 	builder := &fakeBuilder{}
 	store := NewBinaryStore(builder, nil)
-	plat := Platform{OS: "linux", Arch: "amd64"}
+	plat := crossPlatform(t)
 	cached, _ := BinaryCachePath(plat)
 	if err := writeBinary(cached, []byte("#!/bin/sh\necho "+assets.Version()+"\n")); err != nil {
 		t.Fatal(err)
@@ -93,7 +107,7 @@ func TestResolveRebuildsStaleCache(t *testing.T) {
 	t.Setenv("SSHEX_HOME", t.TempDir())
 	builder := &fakeBuilder{}
 	store := NewBinaryStore(builder, nil)
-	plat := Platform{OS: "linux", Arch: "amd64"}
+	plat := crossPlatform(t)
 	cached, _ := BinaryCachePath(plat)
 	if err := writeBinary(cached, []byte("#!/bin/sh\necho 0.0.0-old\n")); err != nil {
 		t.Fatal(err)
@@ -111,7 +125,7 @@ func TestResolveFallsBackToDownload(t *testing.T) {
 	builder := &fakeBuilder{err: ErrNoSource}
 	downloader := &fakeDownloader{}
 	store := NewBinaryStore(builder, downloader)
-	plat := Platform{OS: "linux", Arch: "arm64"}
+	plat := crossPlatform(t)
 	if _, err := store.Resolve(context.Background(), plat); err != nil {
 		t.Fatalf("Resolve() error: %v", err)
 	}
@@ -123,7 +137,7 @@ func TestResolveFallsBackToDownload(t *testing.T) {
 func TestResolveReportsBuilderFailure(t *testing.T) {
 	t.Setenv("SSHEX_HOME", t.TempDir())
 	store := NewBinaryStore(&fakeBuilder{err: errors.New("no go")}, nil)
-	_, err := store.Resolve(context.Background(), Platform{OS: "linux", Arch: "amd64"})
+	_, err := store.Resolve(context.Background(), crossPlatform(t))
 	if err == nil || !strings.Contains(err.Error(), "no go") {
 		t.Fatalf("Resolve() error = %v", err)
 	}
