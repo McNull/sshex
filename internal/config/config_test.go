@@ -221,3 +221,52 @@ func TestRuntimeDirIsolated(t *testing.T) {
 		t.Fatalf("RuntimeDir() explicit = %q", explicit)
 	}
 }
+
+func TestControlDir(t *testing.T) {
+	t.Setenv("SSHEX_CONTROL_DIR", "")
+	t.Setenv("SSHEX_CONTROL_BASE", t.TempDir())
+	t.Setenv("SSHEX_CONFIG", "")
+
+	def, err := ControlDir()
+	if err != nil {
+		t.Fatalf("ControlDir() error: %v", err)
+	}
+	if filepath.Base(def) != "control" {
+		t.Fatalf("ControlDir() = %q, want a control dir", def)
+	}
+	if !strings.HasPrefix(filepath.Base(filepath.Dir(def)), DirName+"-") {
+		t.Fatalf("ControlDir() parent = %q, want a %s- prefix", filepath.Dir(def), DirName)
+	}
+
+	isolated, err := ControlDirFor(filepath.Join(t.TempDir(), "test.yml"))
+	if err != nil {
+		t.Fatalf("ControlDirFor() error: %v", err)
+	}
+	if isolated == def {
+		t.Fatalf("ControlDirFor() = %q, want an isolated dir", isolated)
+	}
+
+	t.Setenv("SSHEX_CONTROL_DIR", "/custom/control")
+	explicit, err := ControlDir()
+	if err != nil {
+		t.Fatalf("ControlDir() error: %v", err)
+	}
+	if explicit != "/custom/control" {
+		t.Fatalf("ControlDir() explicit = %q", explicit)
+	}
+}
+
+func TestControlDirStaysShort(t *testing.T) {
+	t.Setenv("SSHEX_CONTROL_DIR", "")
+	t.Setenv("SSHEX_CONTROL_BASE", "")
+	t.Setenv("SSHEX_CONFIG", "")
+	dir, err := ControlDir()
+	if err != nil {
+		t.Fatalf("ControlDir() error: %v", err)
+	}
+	// OpenSSH appends a random suffix to the control path while creating it;
+	// unix sockets allow roughly 104 bytes on macOS.
+	if len(filepath.Join(dir, "0123456789abcdef.ctl"))+20 > 100 {
+		t.Fatalf("ControlDir() = %q; control path too long for a unix socket", dir)
+	}
+}

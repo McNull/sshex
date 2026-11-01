@@ -96,6 +96,9 @@ func Default() Config {
 }
 
 func Dir() (string, error) {
+	if base := os.Getenv("XDG_CONFIG_HOME"); base != "" {
+		return filepath.Join(base, DirName), nil
+	}
 	base, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
@@ -128,6 +131,40 @@ func RuntimeDir() (string, error) {
 		return dir, nil
 	}
 	return runtimeDirFor(os.Getenv("SSHEX_CONFIG"))
+}
+
+// ControlDir returns a short private directory for SSH control sockets. OpenSSH
+// appends a random suffix while creating a master socket, and the default
+// runtime directory on macOS (under /var/folders) is already close to the
+// ~100-byte unix socket path limit. A uid-scoped directory under /tmp mirrors
+// OpenSSH's own defaults and keeps the socket path short on every platform.
+func ControlDir() (string, error) {
+	return ControlDirFor(os.Getenv("SSHEX_CONFIG"))
+}
+
+// ControlDirFor is ControlDir for an explicit config path. A non-default config
+// gets its own namespace, mirroring RuntimeDir.
+func ControlDirFor(configPath string) (string, error) {
+	if dir := os.Getenv("SSHEX_CONTROL_DIR"); dir != "" {
+		return dir, nil
+	}
+	name := fmt.Sprintf("%s-%d", DirName, os.Getuid())
+	if configPath != "" && !isDefaultConfig(configPath) {
+		name = fmt.Sprintf("%s-%s", name, shortHash(configPath))
+	}
+	return filepath.Join(shortTempBase(), name, "control"), nil
+}
+
+// shortTempBase returns a base directory with a short absolute path. TMPDIR on
+// macOS is long enough to break unix sockets, so /tmp is preferred.
+func shortTempBase() string {
+	if dir := os.Getenv("SSHEX_CONTROL_BASE"); dir != "" {
+		return dir
+	}
+	if info, err := os.Stat("/tmp"); err == nil && info.IsDir() {
+		return "/tmp"
+	}
+	return os.TempDir()
 }
 
 // runtimeDirFor derives the runtime directory. A non-default config file gets

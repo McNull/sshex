@@ -41,7 +41,7 @@ func newTestEnv() testEnv {
 	tunnelRepo := memory.NewTunnelRepository()
 	commandRepo := memory.NewCommandRepository()
 	transport := openssh.NewTransport()
-	installer := remoteinstall.NewLinuxInstaller()
+	installer := remoteinstall.NewPosixInstaller(remoteinstall.NewBinaryStore(nil, nil))
 	auth := control.NewAuthenticator()
 	auth.Register(testToken, model.Capabilities{model.CapabilityTunnels, model.CapabilityExec, model.CapabilityCommands}, "")
 	auth.Register(restrictedToken, model.Capabilities{model.CapabilityTunnels, model.CapabilityExec}, "")

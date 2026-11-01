@@ -40,9 +40,9 @@ func TestSessionProbeScript(t *testing.T) {
 	}
 }
 
-func TestLinuxSessionProbeRunsScript(t *testing.T) {
+func TestPosixSessionProbeRunsScript(t *testing.T) {
 	conn := &fakeConn{}
-	p := NewLinuxSessionProbe()
+	p := NewPosixSessionProbe()
 	sessions, err := p.Active(context.Background(), conn, RemotePaths{DataDir: "/data", RunDir: "/run"})
 	if err != nil {
 		t.Fatalf("Active() error: %v", err)

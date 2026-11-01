@@ -11,7 +11,12 @@ import (
 const (
 	completionsMarker = "# >>> sshex completions >>>"
 	dataExpr          = `${SSHEX_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/sshex}`
-	shellDetectScript = `s=${SHELL:-}; [ -n "$s" ] || s=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7); basename "$s"`
+	// getent exists on Linux; macOS uses dscl to read the login shell when
+	// SHELL is unset (for example over a non-login SSH session).
+	shellDetectScript = `s=${SHELL:-}; ` +
+		`[ -n "$s" ] || s=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7); ` +
+		`[ -n "$s" ] || s=$(dscl . -read "$HOME" UserShell 2>/dev/null | awk '{print $2}'); ` +
+		`basename "$s"`
 )
 
 type Shell string
@@ -28,13 +33,13 @@ type CompletionsInstaller interface {
 	Uninstall(ctx context.Context, conn Runner, paths RemotePaths) error
 }
 
-type LinuxCompletionsInstaller struct{}
+type PosixCompletionsInstaller struct{}
 
-func NewLinuxCompletionsInstaller() *LinuxCompletionsInstaller {
-	return &LinuxCompletionsInstaller{}
+func NewPosixCompletionsInstaller() *PosixCompletionsInstaller {
+	return &PosixCompletionsInstaller{}
 }
 
-func (i *LinuxCompletionsInstaller) DetectShell(ctx context.Context, conn Runner) (Shell, bool, error) {
+func (i *PosixCompletionsInstaller) DetectShell(ctx context.Context, conn Runner) (Shell, bool, error) {
 	var buf bytes.Buffer
 	script := shellDetectScript
 	if err := conn.Run(ctx, script, nil, &buf, nil); err != nil {
@@ -44,7 +49,7 @@ func (i *LinuxCompletionsInstaller) DetectShell(ctx context.Context, conn Runner
 	return shell, ok, nil
 }
 
-func (i *LinuxCompletionsInstaller) Install(ctx context.Context, conn Runner, paths RemotePaths, shell Shell) error {
+func (i *PosixCompletionsInstaller) Install(ctx context.Context, conn Runner, paths RemotePaths, shell Shell) error {
 	script, err := completionInstallScript(paths, shell)
 	if err != nil {
 		return err
@@ -55,7 +60,7 @@ func (i *LinuxCompletionsInstaller) Install(ctx context.Context, conn Runner, pa
 	return nil
 }
 
-func (i *LinuxCompletionsInstaller) Uninstall(ctx context.Context, conn Runner, paths RemotePaths) error {
+func (i *PosixCompletionsInstaller) Uninstall(ctx context.Context, conn Runner, paths RemotePaths) error {
 	if err := conn.Run(ctx, completionUninstallScript(), nil, nil, nil); err != nil {
 		return fmt.Errorf("uninstall remote completions: %w", err)
 	}
@@ -109,12 +114,15 @@ end
 		replaceManagedBlockScript(`"$rc"`, completionsMarker, "# <<< sshex completions <<<", block)
 }
 
+// replaceManagedBlockScript swaps a marker-delimited block in a startup file.
+// The replacement is passed through the environment because BSD awk (macOS)
+// rejects literal newlines in -v assignments.
 func replaceManagedBlockScript(rc, start, end, block string) string {
 	return `tmp="$rc.sshex-install-` + strings.ReplaceAll(strings.Trim(start, "# >"), " ", "-") + `"; ` +
-		`awk -v start=` + shellQuote(start) + ` -v end=` + shellQuote(end) + ` -v replacement=` + shellQuote(block) + ` '` +
+		`SSHEX_BLOCK=` + shellQuote(block) + ` awk -v start=` + shellQuote(start) + ` -v end=` + shellQuote(end) + ` '` +
 		`$0 == start && !inside { inside = 1; buffer = $0 ORS; next } ` +
-		`inside { buffer = buffer $0 ORS; if ($0 == end) { inside = 0; buffer = ""; if (!replaced) { printf "%s\n", replacement; replaced = 1 } }; next } ` +
-		`{ print } END { if (inside) printf "%s", buffer; if (!replaced) printf "%s\n", replacement }' "$rc" > "$tmp" && mv "$tmp" "$rc"`
+		`inside { buffer = buffer $0 ORS; if ($0 == end) { inside = 0; buffer = ""; if (!replaced) { printf "%s\n", ENVIRON["SSHEX_BLOCK"]; replaced = 1 } }; next } ` +
+		`{ print } END { if (inside) printf "%s", buffer; if (!replaced) printf "%s\n", ENVIRON["SSHEX_BLOCK"] }' "$rc" > "$tmp" && mv "$tmp" "$rc"`
 }
 
 func removeManagedBlockScript(rc, start, end string) string {

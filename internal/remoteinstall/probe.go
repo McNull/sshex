@@ -15,13 +15,13 @@ type SessionProbe interface {
 	Active(ctx context.Context, run Runner, paths RemotePaths) ([]sessionfile.File, error)
 }
 
-type LinuxSessionProbe struct{}
+type PosixSessionProbe struct{}
 
-func NewLinuxSessionProbe() *LinuxSessionProbe {
-	return &LinuxSessionProbe{}
+func NewPosixSessionProbe() *PosixSessionProbe {
+	return &PosixSessionProbe{}
 }
 
-func (p *LinuxSessionProbe) Active(ctx context.Context, run Runner, paths RemotePaths) ([]sessionfile.File, error) {
+func (p *PosixSessionProbe) Active(ctx context.Context, run Runner, paths RemotePaths) ([]sessionfile.File, error) {
 	var buf bytes.Buffer
 	if err := run.Run(ctx, sessionProbeScript(paths), nil, &buf, nil); err != nil {
 		return nil, err

@@ -21,6 +21,7 @@ func (p RemotePaths) BinDir() string         { return path.Join(p.DataDir, "bin"
 func (p RemotePaths) BinPath() string        { return path.Join(p.DataDir, "bin", "sshex") }
 func (p RemotePaths) SessionsDir() string    { return path.Join(p.DataDir, "sessions") }
 func (p RemotePaths) CompletionsDir() string { return path.Join(p.DataDir, "completions") }
+func (p RemotePaths) DistDir() string        { return path.Join(p.DataDir, "dist") }
 
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"

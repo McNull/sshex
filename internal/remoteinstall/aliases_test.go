@@ -33,7 +33,7 @@ func TestInstallAliases(t *testing.T) {
 	paths := RemotePaths{DataDir: "/home/tester/.local/share/sshex", RunDir: "/run/user/1000/sshex"}
 	for _, shell := range []Shell{ShellBash, ShellZsh, ShellFish} {
 		conn := &fakeConn{}
-		if err := NewLinuxAliasInstaller().Install(context.Background(), conn, paths, shell, []Alias{{Name: "code", Command: "code"}}); err != nil {
+		if err := NewPosixAliasInstaller().Install(context.Background(), conn, paths, shell, []Alias{{Name: "code", Command: "code"}}); err != nil {
 			t.Fatalf("Install(%s) error: %v", shell, err)
 		}
 		if len(conn.commands) != 1 {
@@ -80,7 +80,7 @@ func TestAliasUninstallScript(t *testing.T) {
 func TestUninstallAliasesRunsScript(t *testing.T) {
 	conn := &fakeConn{}
 	paths := RemotePaths{DataDir: "/home/tester/.local/share/sshex", RunDir: "/run/user/1000/sshex"}
-	if err := NewLinuxAliasInstaller().Uninstall(context.Background(), conn, paths); err != nil {
+	if err := NewPosixAliasInstaller().Uninstall(context.Background(), conn, paths); err != nil {
 		t.Fatalf("Uninstall() error: %v", err)
 	}
 	if len(conn.commands) != 1 || !strings.Contains(conn.commands[0], aliasesMarker) {

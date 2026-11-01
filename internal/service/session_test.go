@@ -309,13 +309,13 @@ func newAdoptingService(t *testing.T, transport Transport) (testServices, *Sessi
 		Connections: connectionRepo,
 		Tunnels:     tunnelRepo,
 		Transport:   transport,
-		Control:     unix.NewProvider(t.TempDir()),
+		Control:     unix.NewProvider(shortTempDir(t)),
 		Installer:   &fakeInstaller{},
 		Completions: &fakeCompletions{},
 		Auth:        control.NewAuthenticator(),
 		IDs:         ids,
 		Pool:        pool,
-		ControlDir:  t.TempDir(),
+		ControlDir:  shortTempDir(t),
 	})
 	return testServices{
 		sessions:       svc,
@@ -407,12 +407,12 @@ func TestConnectIssuesRestrictedRemoteToken(t *testing.T) {
 		Connections: memory.NewConnectionRepository(),
 		Tunnels:     memory.NewTunnelRepository(),
 		Transport:   &fakeTransport{conn: &fakeConn{}},
-		Control:     unix.NewProvider(t.TempDir()),
+		Control:     unix.NewProvider(shortTempDir(t)),
 		Installer:   installer,
 		Auth:        auth,
 		IDs:         func() string { return "sess" },
 		Pool:        pool,
-		ControlDir:  t.TempDir(),
+		ControlDir:  shortTempDir(t),
 		SessionDir:  dir,
 	})
 

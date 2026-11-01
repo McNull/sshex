@@ -3,6 +3,8 @@ package remoteinstall
 import (
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,6 +12,19 @@ import (
 	"github.com/mcnull/sshex/internal/sessionfile"
 	"github.com/mcnull/sshex/internal/sshx"
 )
+
+type staticResolver string
+
+func (s staticResolver) Resolve(context.Context, Platform) (string, error) { return string(s), nil }
+
+func newTestInstaller(t *testing.T) *PosixInstaller {
+	t.Helper()
+	exe := filepath.Join(t.TempDir(), "sshex")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return NewPosixInstaller(staticResolver(exe))
+}
 
 type fakeConn struct {
 	commands []string
@@ -49,7 +64,7 @@ func (f *fakeConn) Close(context.Context) error                                 
 
 func TestRemotePaths(t *testing.T) {
 	conn := &fakeConn{stdout: map[string]string{pathsScript: "/home/tester/.local/share/sshex\n/run/user/1000/sshex\n"}}
-	paths, err := NewLinuxInstaller().RemotePaths(context.Background(), conn)
+	paths, err := newTestInstaller(t).RemotePaths(context.Background(), conn)
 	if err != nil {
 		t.Fatalf("RemotePaths() error: %v", err)
 	}
@@ -64,7 +79,7 @@ func TestRemotePaths(t *testing.T) {
 func TestInstallCopiesBinary(t *testing.T) {
 	conn := &fakeConn{}
 	paths := RemotePaths{DataDir: "/home/tester/.local/share/sshex", RunDir: "/run/user/1000/sshex"}
-	if err := NewLinuxInstaller().Install(context.Background(), conn, paths); err != nil {
+	if err := newTestInstaller(t).Install(context.Background(), conn, paths, Platform{OS: "linux", Arch: "amd64"}); err != nil {
 		t.Fatalf("Install() error: %v", err)
 	}
 	if len(conn.commands) != 1 || !strings.Contains(conn.commands[0], paths.BinPath()) {
@@ -83,7 +98,7 @@ func TestWriteSession(t *testing.T) {
 		Endpoint: model.Endpoint{Kind: model.EndpointUnix, Address: "/run/user/1000/sshex/abc.sock"},
 		Token:    "secret",
 	}
-	if err := NewLinuxInstaller().WriteSession(context.Background(), conn, paths, file); err != nil {
+	if err := newTestInstaller(t).WriteSession(context.Background(), conn, paths, file); err != nil {
 		t.Fatalf("WriteSession() error: %v", err)
 	}
 	if len(conn.stdin) != 1 {
@@ -100,7 +115,7 @@ func TestWriteSession(t *testing.T) {
 func TestRemove(t *testing.T) {
 	conn := &fakeConn{}
 	paths := RemotePaths{DataDir: "/home/tester/.local/share/sshex", RunDir: "/run/user/1000/sshex"}
-	if err := NewLinuxInstaller().Remove(context.Background(), conn, paths, sessionfile.File{ID: "abc"}); err != nil {
+	if err := newTestInstaller(t).Remove(context.Background(), conn, paths, sessionfile.File{ID: "abc"}); err != nil {
 		t.Fatalf("Remove() error: %v", err)
 	}
 	if len(conn.commands) != 1 || !strings.Contains(conn.commands[0], "abc.json") || !strings.Contains(conn.commands[0], "abc.sock") {
@@ -111,7 +126,7 @@ func TestRemove(t *testing.T) {
 func TestUninstall(t *testing.T) {
 	conn := &fakeConn{}
 	paths := RemotePaths{DataDir: "/home/tester/.local/share/sshex", RunDir: "/run/user/1000/sshex"}
-	if err := NewLinuxInstaller().Uninstall(context.Background(), conn, paths); err != nil {
+	if err := newTestInstaller(t).Uninstall(context.Background(), conn, paths); err != nil {
 		t.Fatalf("Uninstall() error: %v", err)
 	}
 	if len(conn.commands) != 1 {
@@ -123,6 +138,7 @@ func TestUninstall(t *testing.T) {
 		paths.BinDir(),
 		paths.SessionsDir(),
 		paths.CompletionsDir(),
+		paths.DistDir(),
 		paths.RunDir,
 		paths.DataDir,
 	} {

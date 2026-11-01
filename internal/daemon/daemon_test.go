@@ -66,8 +66,18 @@ func TestDaemonRunNotImplemented(t *testing.T) {
 	}
 }
 
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "sshex-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 func TestEnsureReusesRunningService(t *testing.T) {
-	base := t.TempDir()
+	base := shortTempDir(t)
 	t.Setenv("XDG_RUNTIME_DIR", base)
 
 	sock := filepath.Join(base, "daemon.sock")

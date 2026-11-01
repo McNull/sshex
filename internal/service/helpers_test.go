@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"io"
+	"os"
+	"testing"
 
 	"github.com/mcnull/sshex/internal/control"
 	"github.com/mcnull/sshex/internal/control/unix"
@@ -70,7 +72,7 @@ func newTestServicesWithPorts(ports PortChecker) testServices {
 	connectionRepo := memory.NewConnectionRepository()
 	tunnelRepo := memory.NewTunnelRepository()
 	transport := openssh.NewTransport()
-	installer := remoteinstall.NewLinuxInstaller()
+	installer := remoteinstall.NewPosixInstaller(remoteinstall.NewBinaryStore(nil, nil))
 	auth := control.NewAuthenticator()
 	provider := unix.NewProvider("")
 	pool := sshx.NewPool()
@@ -106,4 +108,17 @@ func newTestServicesWithPorts(ports PortChecker) testServices {
 		connectionRepo: connectionRepo,
 		tunnelRepo:     tunnelRepo,
 	}
+}
+
+// shortTempDir returns a temporary directory with a short path. Unix domain
+// sockets are limited to roughly 100 bytes, and macOS t.TempDir() paths exceed
+// that limit.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "sshex-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }

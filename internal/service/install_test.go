@@ -18,11 +18,15 @@ type fakeInstaller struct {
 	written     sessionfile.File
 }
 
+func (f *fakeInstaller) Detect(context.Context, remoteinstall.Runner) (remoteinstall.Platform, error) {
+	return remoteinstall.Platform{OS: "linux", Arch: "amd64"}, nil
+}
+
 func (f *fakeInstaller) RemotePaths(context.Context, remoteinstall.Runner) (remoteinstall.RemotePaths, error) {
 	return f.paths, nil
 }
 
-func (f *fakeInstaller) Install(context.Context, remoteinstall.Runner, remoteinstall.RemotePaths) error {
+func (f *fakeInstaller) Install(context.Context, remoteinstall.Runner, remoteinstall.RemotePaths, remoteinstall.Platform) error {
 	return nil
 }
 

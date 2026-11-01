@@ -43,9 +43,10 @@ func New(cfg config.Config, configPath string) (*App, error) {
 	tunnelRepo := memory.NewTunnelRepository()
 	commandRepo := configrepo.NewCommandRepository(configPath)
 	transport := openssh.NewTransport()
-	installer := remoteinstall.NewLinuxInstaller()
-	completions := remoteinstall.NewLinuxCompletionsInstaller()
-	aliases := remoteinstall.NewLinuxAliasInstaller()
+	binaries := remoteinstall.NewBinaryStore(remoteinstall.NewGoBuilder(), remoteinstall.NewReleaseDownloader())
+	installer := remoteinstall.NewPosixInstaller(binaries)
+	completions := remoteinstall.NewPosixCompletionsInstaller()
+	aliases := remoteinstall.NewPosixAliasInstaller()
 	auth := control.NewAuthenticator()
 	pool := sshx.NewPool()
 
@@ -53,7 +54,10 @@ func New(cfg config.Config, configPath string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	controlDir := filepath.Join(runtimeDir, "control")
+	controlDir, err := config.ControlDirFor(configPath)
+	if err != nil {
+		return nil, err
+	}
 	sessionDir := filepath.Join(runtimeDir, "sessions")
 	controlProvider := unix.NewProvider(controlDir)
 
@@ -93,7 +97,7 @@ func New(cfg config.Config, configPath string) (*App, error) {
 		Installer:   installer,
 		Completions: completions,
 		Aliases:     aliases,
-		Probe:       remoteinstall.NewLinuxSessionProbe(),
+		Probe:       remoteinstall.NewPosixSessionProbe(),
 		Local:       local.NewRunner(),
 		StopBroker:  stopBroker,
 		IDs:         newID,

@@ -11,13 +11,21 @@ import (
 	"github.com/mcnull/sshex/internal/sessionfile"
 )
 
-type LinuxInstaller struct{}
-
-func NewLinuxInstaller() *LinuxInstaller {
-	return &LinuxInstaller{}
+// PosixInstaller installs sshex on POSIX hosts. Linux and macOS remotes share
+// the same shell scripts; only the uploaded binary differs.
+type PosixInstaller struct {
+	binaries BinaryResolver
 }
 
-func (i *LinuxInstaller) RemotePaths(ctx context.Context, conn Runner) (RemotePaths, error) {
+func NewPosixInstaller(binaries BinaryResolver) *PosixInstaller {
+	return &PosixInstaller{binaries: binaries}
+}
+
+func (i *PosixInstaller) Detect(ctx context.Context, conn Runner) (Platform, error) {
+	return DetectPlatform(ctx, conn)
+}
+
+func (i *PosixInstaller) RemotePaths(ctx context.Context, conn Runner) (RemotePaths, error) {
 	var buf bytes.Buffer
 	if err := conn.Run(ctx, pathsScript, nil, &buf, nil); err != nil {
 		return RemotePaths{}, err
@@ -29,8 +37,8 @@ func (i *LinuxInstaller) RemotePaths(ctx context.Context, conn Runner) (RemotePa
 	return RemotePaths{DataDir: lines[0], RunDir: lines[1]}, nil
 }
 
-func (i *LinuxInstaller) Install(ctx context.Context, conn Runner, paths RemotePaths) error {
-	exe, err := os.Executable()
+func (i *PosixInstaller) Install(ctx context.Context, conn Runner, paths RemotePaths, platform Platform) error {
+	exe, err := i.binaries.Resolve(ctx, platform)
 	if err != nil {
 		return err
 	}
@@ -50,7 +58,7 @@ func (i *LinuxInstaller) Install(ctx context.Context, conn Runner, paths RemoteP
 	return nil
 }
 
-func (i *LinuxInstaller) WriteSession(ctx context.Context, conn Runner, paths RemotePaths, file sessionfile.File) error {
+func (i *PosixInstaller) WriteSession(ctx context.Context, conn Runner, paths RemotePaths, file sessionfile.File) error {
 	data, err := sessionfile.Marshal(file)
 	if err != nil {
 		return err
@@ -63,7 +71,7 @@ func (i *LinuxInstaller) WriteSession(ctx context.Context, conn Runner, paths Re
 	return nil
 }
 
-func (i *LinuxInstaller) Remove(ctx context.Context, conn Runner, paths RemotePaths, file sessionfile.File) error {
+func (i *PosixInstaller) Remove(ctx context.Context, conn Runner, paths RemotePaths, file sessionfile.File) error {
 	script := `rm -f ` + shellQuote(path.Join(paths.SessionsDir(), file.ID+".json")) + ` ` + shellQuote(path.Join(paths.RunDir, file.ID+".sock"))
 	if err := conn.Run(ctx, script, nil, nil, nil); err != nil {
 		return fmt.Errorf("remove remote session: %w", err)
@@ -71,9 +79,9 @@ func (i *LinuxInstaller) Remove(ctx context.Context, conn Runner, paths RemotePa
 	return nil
 }
 
-func (i *LinuxInstaller) Uninstall(ctx context.Context, conn Runner, paths RemotePaths) error {
+func (i *PosixInstaller) Uninstall(ctx context.Context, conn Runner, paths RemotePaths) error {
 	script := `rm -f "$HOME/.local/bin/sshex"; ` +
-		`rm -rf ` + shellQuote(paths.BinDir()) + ` ` + shellQuote(paths.SessionsDir()) + ` ` + shellQuote(paths.CompletionsDir()) + ` ` + shellQuote(paths.RunDir) + `; ` +
+		`rm -rf ` + shellQuote(paths.BinDir()) + ` ` + shellQuote(paths.SessionsDir()) + ` ` + shellQuote(paths.CompletionsDir()) + ` ` + shellQuote(paths.DistDir()) + ` ` + shellQuote(paths.RunDir) + `; ` +
 		`rmdir ` + shellQuote(paths.DataDir) + ` 2>/dev/null || true`
 	if err := conn.Run(ctx, script, nil, nil, nil); err != nil {
 		return fmt.Errorf("uninstall remote sshex: %w", err)

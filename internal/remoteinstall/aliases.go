@@ -22,13 +22,13 @@ type AliasInstaller interface {
 	Uninstall(ctx context.Context, conn Runner, paths RemotePaths) error
 }
 
-type LinuxAliasInstaller struct{}
+type PosixAliasInstaller struct{}
 
-func NewLinuxAliasInstaller() *LinuxAliasInstaller {
-	return &LinuxAliasInstaller{}
+func NewPosixAliasInstaller() *PosixAliasInstaller {
+	return &PosixAliasInstaller{}
 }
 
-func (i *LinuxAliasInstaller) Install(ctx context.Context, conn Runner, paths RemotePaths, shell Shell, aliases []Alias) error {
+func (i *PosixAliasInstaller) Install(ctx context.Context, conn Runner, paths RemotePaths, shell Shell, aliases []Alias) error {
 	script, err := aliasInstallScript(paths, shell, aliases)
 	if err != nil {
 		return err
@@ -39,7 +39,7 @@ func (i *LinuxAliasInstaller) Install(ctx context.Context, conn Runner, paths Re
 	return nil
 }
 
-func (i *LinuxAliasInstaller) Uninstall(ctx context.Context, conn Runner, paths RemotePaths) error {
+func (i *PosixAliasInstaller) Uninstall(ctx context.Context, conn Runner, paths RemotePaths) error {
 	if err := conn.Run(ctx, aliasUninstallScript(), nil, nil, nil); err != nil {
 		return fmt.Errorf("uninstall remote aliases: %w", err)
 	}

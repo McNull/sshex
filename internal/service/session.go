@@ -238,7 +238,11 @@ func (s *SessionService) createSession(ctx context.Context, target sshx.Target, 
 	if err != nil {
 		return fail(err)
 	}
-	if err := s.installer.Install(ctx, conn, paths); err != nil {
+	platform, err := s.installer.Detect(ctx, conn)
+	if err != nil {
+		return fail(err)
+	}
+	if err := s.installer.Install(ctx, conn, paths, platform); err != nil {
 		return fail(err)
 	}
 

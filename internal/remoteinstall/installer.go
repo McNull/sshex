@@ -14,8 +14,9 @@ type Runner interface {
 }
 
 type Installer interface {
+	Detect(ctx context.Context, run Runner) (Platform, error)
 	RemotePaths(ctx context.Context, run Runner) (RemotePaths, error)
-	Install(ctx context.Context, run Runner, paths RemotePaths) error
+	Install(ctx context.Context, run Runner, paths RemotePaths, platform Platform) error
 	WriteSession(ctx context.Context, run Runner, paths RemotePaths, file sessionfile.File) error
 	Remove(ctx context.Context, run Runner, paths RemotePaths, file sessionfile.File) error
 	Uninstall(ctx context.Context, run Runner, paths RemotePaths) error

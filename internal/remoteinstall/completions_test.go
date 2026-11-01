@@ -39,7 +39,7 @@ func TestDetectShell(t *testing.T) {
 		{"tcsh\n", "", false},
 	} {
 		conn := &fakeConn{stdout: map[string]string{shellDetectScript: tc.out}}
-		shell, ok, err := NewLinuxCompletionsInstaller().DetectShell(context.Background(), conn)
+		shell, ok, err := NewPosixCompletionsInstaller().DetectShell(context.Background(), conn)
 		if err != nil {
 			t.Fatalf("DetectShell() error: %v", err)
 		}
@@ -53,7 +53,7 @@ func TestInstallCompletions(t *testing.T) {
 	paths := RemotePaths{DataDir: "/home/tester/.local/share/sshex", RunDir: "/run/user/1000/sshex"}
 	for _, shell := range []Shell{ShellBash, ShellZsh, ShellFish} {
 		conn := &fakeConn{}
-		if err := NewLinuxCompletionsInstaller().Install(context.Background(), conn, paths, shell); err != nil {
+		if err := NewPosixCompletionsInstaller().Install(context.Background(), conn, paths, shell); err != nil {
 			t.Fatalf("Install(%s) error: %v", shell, err)
 		}
 		if len(conn.commands) != 1 {
@@ -118,7 +118,7 @@ func TestCompletionUninstallScript(t *testing.T) {
 func TestUninstallCompletionsRunsScript(t *testing.T) {
 	conn := &fakeConn{}
 	paths := RemotePaths{DataDir: "/home/tester/.local/share/sshex", RunDir: "/run/user/1000/sshex"}
-	if err := NewLinuxCompletionsInstaller().Uninstall(context.Background(), conn, paths); err != nil {
+	if err := NewPosixCompletionsInstaller().Uninstall(context.Background(), conn, paths); err != nil {
 		t.Fatalf("Uninstall() error: %v", err)
 	}
 	if len(conn.commands) != 1 || !strings.Contains(conn.commands[0], initMarker) {
