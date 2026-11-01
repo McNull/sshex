@@ -53,7 +53,7 @@ var commandAddCmd = &cobra.Command{
 			return err
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "command %q added\n", name)
-		printCommandHints(cmd.OutOrStdout(), name, alias != "")
+		printCommandHints(cmd.OutOrStdout(), name, alias != "", recordDemoMode())
 		return nil
 	},
 }
@@ -93,14 +93,17 @@ func addCommandInteractive(cmd *cobra.Command, manager commandManager) error {
 		return err
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "command %q added\n", created.Name)
-	printCommandHints(cmd.OutOrStdout(), created.Name, created.Alias != "")
+	printCommandHints(cmd.OutOrStdout(), created.Name, created.Alias != "", recordDemoMode())
 	return nil
 }
 
 // printCommandHints reports how a command can be executed and, when its shell
 // alias was added or changed, that the sshex sessions must be restarted for the
-// alias to take effect.
-func printCommandHints(out io.Writer, name string, aliasChanged bool) {
+// alias to take effect. Nothing is printed in demo mode.
+func printCommandHints(out io.Writer, name string, aliasChanged, quiet bool) {
+	if quiet {
+		return
+	}
 	fmt.Fprintf(out, "Command can be executed with `sshex exec %s`\n", name)
 	if aliasChanged {
 		fmt.Fprintln(out, "Restart sshex sessions for the alias to take effect")
@@ -277,7 +280,7 @@ var commandEditCmd = &cobra.Command{
 			return err
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "command %q updated\n", updated.Name)
-		printCommandHints(cmd.OutOrStdout(), updated.Name, updated.Alias != current.Alias)
+		printCommandHints(cmd.OutOrStdout(), updated.Name, updated.Alias != current.Alias, recordDemoMode())
 		return nil
 	},
 }
@@ -299,6 +302,7 @@ func promptCommandFields(cmd *cobra.Command, opts commandEditorOptions, commands
 	nameValidator := commandNameValidator(commands, opts.command.Name)
 	aliasValidator := commandAliasValidator(commands, opts.command.Name)
 	p := newPrompter(cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+	p.quiet = recordDemoMode()
 	defer p.close()
 
 	name, err := p.field("name", nameFieldHelp, opts.command.Name, true, nameValidator)
@@ -420,18 +424,35 @@ var commandListCmd = &cobra.Command{
 			fmt.Fprintln(cmd.OutOrStdout(), "no commands.")
 			return nil
 		}
-		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 2, 2, ' ', 0)
-		defer w.Flush()
-		fmt.Fprintln(w, "NAME\tCOMMAND\tALIAS\tDISABLED")
-		for _, command := range commands {
-			disabled := "no"
-			if command.Disabled {
-				disabled = "yes"
-			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", command.Name, command.Command, command.Alias, disabled)
+		short, err := cmd.Flags().GetBool("short")
+		if err != nil {
+			return err
 		}
-		return nil
+		return writeCommandTable(cmd.OutOrStdout(), commands, short)
 	},
+}
+
+// writeCommandTable renders the predefined command list. When short is set the
+// wide COMMAND column is omitted so the table fits on screen.
+func writeCommandTable(w io.Writer, commands []model.Command, short bool) error {
+	tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
+	if short {
+		fmt.Fprintln(tw, "NAME\tALIAS\tDISABLED")
+	} else {
+		fmt.Fprintln(tw, "NAME\tCOMMAND\tALIAS\tDISABLED")
+	}
+	for _, command := range commands {
+		disabled := "no"
+		if command.Disabled {
+			disabled = "yes"
+		}
+		if short {
+			fmt.Fprintf(tw, "%s\t%s\t%s\n", command.Name, command.Alias, disabled)
+		} else {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", command.Name, command.Command, command.Alias, disabled)
+		}
+	}
+	return tw.Flush()
 }
 
 var commandEnableCmd = &cobra.Command{
@@ -653,6 +674,8 @@ func init() {
 	commandAddCmd.Flags().String("alias", "", "Add a shell alias for the command on the remote (defaults to the command name)")
 	commandAddCmd.Flags().Lookup("alias").NoOptDefVal = aliasFromName
 	commandAddCmd.Flags().SetInterspersed(false)
+
+	commandListCmd.Flags().BoolP("short", "s", false, "Hide the command column")
 
 	commandCmd.AddCommand(commandAddCmd, commandEditCmd, commandRmCmd, commandListCmd, commandEnableCmd, commandDisableCmd, commandHelpCmd)
 }
