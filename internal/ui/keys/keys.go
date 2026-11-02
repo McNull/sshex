@@ -204,6 +204,105 @@ func DefaultTunnels() Tunnels {
 	}
 }
 
+// Commands contains the bindings of the Commands list and its add/edit form.
+type Commands struct {
+	Up            key.Binding
+	Down          key.Binding
+	Navigate      key.Binding
+	SearchUp      key.Binding
+	SearchDown    key.Binding
+	Add           key.Binding
+	Edit          key.Binding
+	Remove        key.Binding
+	AddRemove     key.Binding
+	Toggle        key.Binding
+	Refresh       key.Binding
+	FocusList     key.Binding
+	FocusSearch   key.Binding
+	Search        key.Binding
+	NextField     key.Binding
+	PreviousField key.Binding
+	Save          key.Binding
+}
+
+// DefaultCommands returns the Commands screen bindings.
+func DefaultCommands() Commands {
+	return Commands{
+		Up: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑/k", "up"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓/j", "down"),
+		),
+		// Navigate and AddRemove are the compact footer forms of the list
+		// bindings; the actual handling still uses Up/Down and Add/Remove.
+		Navigate: key.NewBinding(
+			key.WithKeys("up", "k", "down", "j"),
+			key.WithHelp("↑/k/↓/j", "navigate"),
+		),
+		// The search field needs j and k as text, so it only treats the arrow
+		// keys as movement.
+		SearchUp: key.NewBinding(
+			key.WithKeys("up"),
+			key.WithHelp("↑", "up"),
+		),
+		SearchDown: key.NewBinding(
+			key.WithKeys("down"),
+			key.WithHelp("↓", "down"),
+		),
+		Add: key.NewBinding(
+			key.WithKeys("a"),
+			key.WithHelp("a", "add command"),
+		),
+		Edit: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "edit"),
+		),
+		Remove: key.NewBinding(
+			key.WithKeys("x"),
+			key.WithHelp("x", "remove command"),
+		),
+		AddRemove: key.NewBinding(
+			key.WithKeys("a", "x"),
+			key.WithHelp("a/x", "add/remove command"),
+		),
+		Toggle: key.NewBinding(
+			key.WithKeys("space"),
+			key.WithHelp("space", "enable/disable"),
+		),
+		Refresh: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "refresh"),
+		),
+		FocusList: key.NewBinding(
+			key.WithKeys("tab", "shift+tab"),
+			key.WithHelp("tab", "commands"),
+		),
+		FocusSearch: key.NewBinding(
+			key.WithKeys("tab", "shift+tab"),
+			key.WithHelp("tab", "search"),
+		),
+		Search: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "search"),
+		),
+		NextField: key.NewBinding(
+			key.WithKeys("tab"),
+			key.WithHelp("tab", "next field"),
+		),
+		PreviousField: key.NewBinding(
+			key.WithKeys("shift+tab"),
+			key.WithHelp("shift+tab", "previous field"),
+		),
+		Save: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "save"),
+		),
+	}
+}
+
 // Confirm and Cancel are used by confirmation prompts.
 func Confirm() key.Binding {
 	return key.NewBinding(

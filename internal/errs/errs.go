@@ -9,4 +9,8 @@ var (
 	ErrNoSession      = errors.New("no active session")
 	ErrActiveSessions = errors.New("active sshex sessions")
 	ErrDisabled       = errors.New("command is disabled")
+	// ErrCommandReadOnly is returned when a command mutation is attempted from
+	// a remote sshex session, where command definitions are managed by the
+	// origin.
+	ErrCommandReadOnly = errors.New("commands cannot be edited from a remote sshex session")
 )

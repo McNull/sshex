@@ -9,6 +9,7 @@ import (
 	"github.com/mcnull/sshex/internal/ui/component/header"
 	"github.com/mcnull/sshex/internal/ui/keys"
 	"github.com/mcnull/sshex/internal/ui/screen"
+	commandscreen "github.com/mcnull/sshex/internal/ui/screen/commands"
 	"github.com/mcnull/sshex/internal/ui/screen/connect"
 	"github.com/mcnull/sshex/internal/ui/screen/menu"
 	"github.com/mcnull/sshex/internal/ui/screen/placeholder"
@@ -42,6 +43,12 @@ type ModelOptions struct {
 	TunnelSource tunnelscreen.Source
 	// TunnelController adds and removes tunnels. Nil uses the live broker.
 	TunnelController tunnelscreen.Controller
+	// CommandSource supplies the Commands screen. Nil uses the live broker or
+	// the local config.
+	CommandSource commandscreen.Source
+	// CommandController mutates commands. Nil uses the live broker or the local
+	// config.
+	CommandController commandscreen.Controller
 }
 
 // Model is the root Bubble Tea model. It owns the chrome, the theme and the
@@ -102,6 +109,18 @@ func New(opts ModelOptions) *Model {
 		}
 	}
 
+	commandSource := opts.CommandSource
+	commandController := opts.CommandController
+	if commandSource == nil || commandController == nil {
+		control := commandControl{}
+		if commandSource == nil {
+			commandSource = control
+		}
+		if commandController == nil {
+			commandController = control
+		}
+	}
+
 	m := &Model{
 		styles:    &styles,
 		themeName: resolved.Name,
@@ -110,7 +129,7 @@ func New(opts ModelOptions) *Model {
 		header:    header.New(&styles),
 		footer:    footer.New(&styles),
 		stack: screen.NewStack(menu.New(
-			defaultMenuItems(&styles, source, runner, sessionSource, sessionCloser, tunnelSource, tunnelController),
+			defaultMenuItems(&styles, source, runner, sessionSource, sessionCloser, tunnelSource, tunnelController, commandSource, commandController),
 			opts.Version,
 			opts.UpdateAvailable,
 			&styles,
@@ -241,7 +260,7 @@ func (m *Model) setDarkBackground(dark bool) {
 	*m.styles = theme.NewStyles(resolved)
 }
 
-func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner connect.Runner, sessionSource sessions.Source, sessionCloser sessions.Closer, tunnelSource tunnelscreen.Source, tunnelController tunnelscreen.Controller) []menu.Item {
+func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner connect.Runner, sessionSource sessions.Source, sessionCloser sessions.Closer, tunnelSource tunnelscreen.Source, tunnelController tunnelscreen.Controller, commandSource commandscreen.Source, commandController commandscreen.Controller) []menu.Item {
 	// Keep one Connect screen for the lifetime of the UI so its query,
 	// selection and scroll position survive a trip back to the menu.
 	connectScreen := connect.New(connect.Options{
@@ -306,6 +325,25 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 		TunnelOpener: openSessionTunnels,
 	})
 
+	// The list owns the current command set; the composition root builds the
+	// add/edit form and receives that set for uniqueness checks.
+	newCommandForm := func(opts commandscreen.FormOptions) screen.Screen {
+		opts.Styles = styles
+		opts.Controller = commandController
+		return commandscreen.NewForm(opts)
+	}
+	commandsScreen := commandscreen.New(commandscreen.Options{
+		Styles:     styles,
+		Source:     commandSource,
+		Controller: commandController,
+		AddOpener: func(existing []commandscreen.Command) screen.Screen {
+			return newCommandForm(commandscreen.FormOptions{Existing: existing})
+		},
+		EditOpener: func(existing []commandscreen.Command, original commandscreen.Command) screen.Screen {
+			return newCommandForm(commandscreen.FormOptions{Existing: existing, Original: &original})
+		},
+	})
+
 	return []menu.Item{
 		{
 			Kind:        "connect",
@@ -329,9 +367,7 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 			Kind:        "commands",
 			Title:       "Commands",
 			Description: "Manage predefined commands",
-			Open: func() screen.Screen {
-				return placeholder.New("Commands", "Manage predefined commands", styles)
-			},
+			Open:        func() screen.Screen { return commandsScreen },
 		},
 		{
 			Kind:        "update",

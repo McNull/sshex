@@ -10,6 +10,7 @@ import (
 
 	"github.com/mcnull/sshex/internal/api"
 	"github.com/mcnull/sshex/internal/client"
+	"github.com/mcnull/sshex/internal/errs"
 	"github.com/mcnull/sshex/internal/model"
 	"github.com/mcnull/sshex/internal/repository"
 	"github.com/mcnull/sshex/internal/service"
@@ -510,7 +511,7 @@ func setCommandDisabled(cmd *cobra.Command, name string, disabled bool) error {
 
 // errCommandReadOnly is returned when a command mutation is attempted from a
 // remote sshex session, where command definitions are managed by the origin.
-var errCommandReadOnly = errors.New("commands cannot be edited from a remote sshex session")
+var errCommandReadOnly = errs.ErrCommandReadOnly
 
 // commandManager abstracts command storage so the CLI can talk to the broker
 // when a session is live, or edit the local config directly otherwise.

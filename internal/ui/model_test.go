@@ -121,6 +121,25 @@ func TestModelOpensSessionsScreen(t *testing.T) {
 	}
 }
 
+func TestModelOpensCommandsScreen(t *testing.T) {
+	m := newTestModel()
+	resize(t, m, 80, 24)
+
+	for range 3 {
+		m.Update(press(tea.KeyDown, ""))
+	}
+	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	action := run(t, cmd).(screen.ActionMsg)
+	m.Update(action)
+
+	if title := m.stack.Top().Title(); title != "Commands" {
+		t.Fatalf("screen title = %q, want Commands", title)
+	}
+	if !strings.Contains(m.View().Content, "loading commands…") {
+		t.Fatal("commands screen content is missing")
+	}
+}
+
 type resumableStub struct {
 	resumed bool
 }

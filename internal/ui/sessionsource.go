@@ -90,21 +90,31 @@ func (sessionControl) Close(id string) error {
 	return err
 }
 
-// controlSessionClient returns a client for some live broker, preferring the
-// default session and falling back to any active one when the origin is
-// ambiguous. It mirrors the CLI's controlClient.
-func controlSessionClient() (*client.Client, error) {
+// controlSessionFile returns a live session file, preferring the default
+// session and falling back to any active one when the origin is ambiguous. It
+// mirrors the CLI's controlFile.
+func controlSessionFile() (sessionfile.File, error) {
 	file, err := sessionfile.Discover()
 	if err == nil {
-		return client.New(file), nil
+		return file, nil
 	}
 	if errors.Is(err, sessionfile.ErrAmbiguous) {
 		active, listErr := sessionfile.ListActive()
 		if listErr == nil && len(active) > 0 {
-			return client.New(active[0]), nil
+			return active[0], nil
 		}
 	}
-	return nil, err
+	return sessionfile.File{}, err
+}
+
+// controlSessionClient returns a client for some live broker using the same
+// discovery rule as the CLI.
+func controlSessionClient() (*client.Client, error) {
+	file, err := controlSessionFile()
+	if err != nil {
+		return nil, err
+	}
+	return client.New(file), nil
 }
 
 // sessionHopsLabel reports the hop count of a session, mirroring the CLI's
