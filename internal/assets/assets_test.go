@@ -45,7 +45,7 @@ func TestLogo(t *testing.T) {
 	if strings.Contains(logo, "{VERSION}") {
 		t.Error("Logo() still contains the {VERSION} placeholder")
 	}
-	if !strings.Contains(logo, "v"+Version()) {
-		t.Errorf("Logo() does not contain version %q", "v"+Version())
+	if strings.Contains(logo, "v"+Version()) {
+		t.Errorf("Logo() unexpectedly contains version %q", "v"+Version())
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mcnull/sshex/internal/assets"
 	"github.com/spf13/cobra"
 )
 
@@ -20,11 +21,12 @@ func TestPrintBanner(t *testing.T) {
 	printBanner(&buf)
 
 	out := buf.String()
-	if !strings.Contains(out, " v"+version) {
-		t.Fatalf("banner missing version, got %q", out)
+	wantVersion := "Version: " + assets.Version() + "\n\n"
+	if !strings.Contains(out, wantVersion) {
+		t.Fatalf("banner missing version line %q, got %q", wantVersion, out)
 	}
-	if strings.Contains(out, "sshex "+version) {
-		t.Errorf("banner still contains 'sshex' text: %q", out)
+	if strings.Contains(out, "sshex "+assets.Version()) {
+		t.Errorf("banner unexpectedly contains inline version text: %q", out)
 	}
 	if strings.Contains(out, "{VERSION}") {
 		t.Errorf("banner still contains {VERSION} placeholder: %q", out)

@@ -15,6 +15,7 @@ const rootHelp = `  Spawn ssh tunnels and execute commands from a remote shell.
   Options:
     -h, --help            Show this help message and exit
     -v, --version         Show version information and exit
+        --version-check   Perform online version check and exit
 
   Commands:
     connect               Connect to a remote machine via ssh

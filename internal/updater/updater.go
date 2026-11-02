@@ -129,6 +129,19 @@ func (u *Updater) Update(ctx context.Context, currentVersion, executablePath str
 	return result, nil
 }
 
+// LatestVersion returns the latest published release version without
+// downloading or installing its assets.
+func (u *Updater) LatestVersion(ctx context.Context) (string, error) {
+	tag, err := u.latestTag(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !releaseTagPattern.MatchString(tag) {
+		return "", fmt.Errorf("invalid latest release tag %q", tag)
+	}
+	return normalizeVersion(tag), nil
+}
+
 func (u *Updater) latestTag(ctx context.Context) (string, error) {
 	data, err := u.get(ctx, u.apiBase)
 	if err != nil {

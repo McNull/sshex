@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"regexp"
-	"strings"
 
 	"github.com/mcnull/sshex/internal/assets"
 	"github.com/spf13/cobra"
@@ -39,15 +38,26 @@ func stripANSI(s string) string {
 	return ansiPattern.ReplaceAllString(s, "")
 }
 
-// printBanner writes the logo, which already carries the version number.
+// printUpdateAvailable reports an available release, using color only when the
+// destination is a color terminal.
+func printUpdateAvailable(w io.Writer, version string) {
+	if isColorTerminal(w) {
+		fmt.Fprintf(w, "Update available: \x1b[33m%s\x1b[0m\nRun \x1b[34msshex update\x1b[0m to install.\n\n", version)
+		return
+	}
+	fmt.Fprintf(w, "Update available: %s\nRun sshex update to install.\n\n", version)
+}
+
 func printBanner(w io.Writer) {
 	logo := assets.Logo()
+	version := assets.Version()
 	if !isColorTerminal(w) {
 		logo = stripANSI(logo)
+		version = stripANSI(version)
+	} else {
+		// question: if 33m is yellow, what is bright white? It's 97m.
+		version = fmt.Sprintf("\x1b[97m%s\x1b[0m", version)
 	}
-	fmt.Fprint(w, logo)
-	if !strings.HasSuffix(logo, "\n") {
-		fmt.Fprintln(w)
-	}
-	fmt.Fprintln(w)
+	fmt.Fprintln(w, logo)
+	fmt.Fprintf(w, "Version: %s\n\n", version)
 }
