@@ -85,8 +85,11 @@ func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Config file to use (default ~/.config/sshex/config.yml)")
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		if cmd == updateCmd {
+			return nil
+		}
 		return setupApplication(cmd)
 	}
 	rootCmd.SetHelpCommand(helpCmd)
-	rootCmd.AddCommand(connectCmd, tunnelCmd, execCmd, commandCmd, sessionCmd, serveCmd, uninstallCmd, completionsCmd, helpCmd)
+	rootCmd.AddCommand(connectCmd, tunnelCmd, execCmd, commandCmd, sessionCmd, serveCmd, uninstallCmd, updateCmd, completionsCmd, helpCmd)
 }

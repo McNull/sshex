@@ -39,7 +39,7 @@ func TestRootHasExecAndCommand(t *testing.T) {
 	for _, c := range rootCmd.Commands() {
 		names[c.Name()] = true
 	}
-	for _, want := range []string{"exec", "command"} {
+	for _, want := range []string{"exec", "command", "update"} {
 		if !names[want] {
 			t.Errorf("root command %q is not registered", want)
 		}

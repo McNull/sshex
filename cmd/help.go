@@ -23,6 +23,7 @@ const rootHelp = `  Spawn ssh tunnels and execute commands from a remote shell.
     command               Manage predefined commands
     session               Manage sshex sessions
     uninstall             Remove the sshex installation from a machine
+    update                Update sshex to the latest release
     completions           Generate shell completions for sshex
     help                  Show this help message and exit
 
@@ -60,6 +61,20 @@ const uninstallHelp = `  Remove the sshex installation from a machine.
                           the value starts with '-'
     -y, --yes             Do not prompt for confirmation
         --force           Uninstall even if other sshex sessions are active
+    -h, --help            Show this help message and exit
+`
+
+const updateHelp = `  Update sshex to the latest release.
+
+  Usage:
+    sshex update
+
+  The matching release binary is downloaded, verified against checksums.txt,
+  and installed in place of this executable. The installation directory must
+  be writable by the current user; package-manager installations should be
+  updated through their package manager.
+
+  Options:
     -h, --help            Show this help message and exit
 `
 
@@ -345,6 +360,7 @@ var helpTexts = map[string]string{
 	"sshex":                 rootHelp,
 	"sshex connect":         connectHelp,
 	"sshex uninstall":       uninstallHelp,
+	"sshex update":          updateHelp,
 	"sshex tunnel":          tunnelHelp,
 	"sshex tunnel add":      tunnelAddHelp,
 	"sshex tunnel rm":       tunnelRmHelp,
