@@ -90,6 +90,56 @@ func DefaultConnect() Connect {
 	}
 }
 
+// Sessions contains the bindings of the Sessions screen.
+type Sessions struct {
+	Up      key.Binding
+	Down    key.Binding
+	Open    key.Binding
+	Close   key.Binding
+	Refresh key.Binding
+}
+
+// DefaultSessions returns the Sessions screen bindings.
+func DefaultSessions() Sessions {
+	return Sessions{
+		Up: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑/k", "up"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓/j", "down"),
+		),
+		Open: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "tunnels"),
+		),
+		Close: key.NewBinding(
+			key.WithKeys("x"),
+			key.WithHelp("x", "close session"),
+		),
+		Refresh: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "refresh"),
+		),
+	}
+}
+
+// Confirm and Cancel are used by confirmation prompts.
+func Confirm() key.Binding {
+	return key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "confirm"),
+	)
+}
+
+func Cancel() key.Binding {
+	return key.NewBinding(
+		key.WithKeys("esc"),
+		key.WithHelp("esc", "cancel"),
+	)
+}
+
 // Back returns the binding used by child screens to return to the previous
 // screen.
 func Back() key.Binding {

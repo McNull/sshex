@@ -153,6 +153,8 @@ type Styles struct {
 	Foreground             lipgloss.Style
 	Muted                  lipgloss.Style
 	Accent                 lipgloss.Style
+	Success                lipgloss.Style
+	Warning                lipgloss.Style
 	Error                  lipgloss.Style
 }
 
@@ -201,6 +203,8 @@ func NewStyles(t Theme) Styles {
 		Foreground:      lipgloss.NewStyle().Foreground(t.Tokens.Foreground),
 		Muted:           lipgloss.NewStyle().Foreground(t.Tokens.Muted),
 		Accent:          lipgloss.NewStyle().Foreground(t.Tokens.Accent),
+		Success:         lipgloss.NewStyle().Foreground(t.Tokens.Success),
+		Warning:         lipgloss.NewStyle().Foreground(t.Tokens.Warning),
 		Error:           lipgloss.NewStyle().Foreground(t.Tokens.Error),
 	}
 }
@@ -240,6 +244,8 @@ func noColorStyles() Styles {
 		Foreground:             lipgloss.NewStyle(),
 		Muted:                  lipgloss.NewStyle(),
 		Accent:                 lipgloss.NewStyle().Bold(true),
+		Success:                lipgloss.NewStyle(),
+		Warning:                lipgloss.NewStyle().Bold(true),
 		Error:                  lipgloss.NewStyle().Bold(true),
 	}
 }

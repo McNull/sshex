@@ -12,6 +12,7 @@ import (
 	"github.com/mcnull/sshex/internal/ui/screen/connect"
 	"github.com/mcnull/sshex/internal/ui/screen/menu"
 	"github.com/mcnull/sshex/internal/ui/screen/placeholder"
+	"github.com/mcnull/sshex/internal/ui/screen/sessions"
 	"github.com/mcnull/sshex/internal/ui/theme"
 )
 
@@ -31,6 +32,11 @@ type ModelOptions struct {
 	HostSource connect.HostSource
 	// Runner starts sessions from the Connect screen. Nil runs this binary.
 	Runner connect.Runner
+	// SessionSource supplies the Sessions screen. Nil uses the live broker.
+	SessionSource sessions.Source
+	// SessionCloser closes sessions from the Sessions screen. Nil uses the
+	// live broker.
+	SessionCloser sessions.Closer
 }
 
 // Model is the root Bubble Tea model. It owns the chrome, the theme and the
@@ -67,6 +73,18 @@ func New(opts ModelOptions) *Model {
 		runner = connect.NewExecRunner()
 	}
 
+	sessionSource := opts.SessionSource
+	sessionCloser := opts.SessionCloser
+	if sessionSource == nil || sessionCloser == nil {
+		control := sessionControl{}
+		if sessionSource == nil {
+			sessionSource = control
+		}
+		if sessionCloser == nil {
+			sessionCloser = control
+		}
+	}
+
 	m := &Model{
 		styles:    &styles,
 		themeName: resolved.Name,
@@ -75,7 +93,7 @@ func New(opts ModelOptions) *Model {
 		header:    header.New(&styles),
 		footer:    footer.New(&styles),
 		stack: screen.NewStack(menu.New(
-			defaultMenuItems(&styles, source, runner),
+			defaultMenuItems(&styles, source, runner, sessionSource, sessionCloser),
 			opts.Version,
 			opts.UpdateAvailable,
 			&styles,
@@ -158,7 +176,11 @@ func (m *Model) apply(action screen.ActionMsg) tea.Cmd {
 			return nil
 		}
 		width, height := m.contentSize()
-		m.stack.Top().Resize(width, height)
+		top := m.stack.Top()
+		top.Resize(width, height)
+		if resumable, ok := top.(screen.Resumable); ok {
+			return resumable.Resume()
+		}
 		return nil
 	case screen.ActionQuit:
 		return tea.Quit
@@ -194,13 +216,20 @@ func (m *Model) setDarkBackground(dark bool) {
 	*m.styles = theme.NewStyles(resolved)
 }
 
-func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner connect.Runner) []menu.Item {
+func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner connect.Runner, sessionSource sessions.Source, sessionCloser sessions.Closer) []menu.Item {
 	// Keep one Connect screen for the lifetime of the UI so its query,
 	// selection and scroll position survive a trip back to the menu.
 	connectScreen := connect.New(connect.Options{
 		Styles: styles,
 		Source: source,
 		Runner: runner,
+	})
+	// Likewise keep the Sessions screen so its selection survives a menu
+	// round-trip; it reloads its data whenever it is opened.
+	sessionsScreen := sessions.New(sessions.Options{
+		Styles: styles,
+		Source: sessionSource,
+		Closer: sessionCloser,
 	})
 
 	return []menu.Item{
@@ -214,9 +243,7 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 			Kind:        "sessions",
 			Title:       "Sessions",
 			Description: "Manage active sessions",
-			Open: func() screen.Screen {
-				return placeholder.New("Sessions", "Manage active sessions", styles)
-			},
+			Open:        func() screen.Screen { return sessionsScreen },
 		},
 		{
 			Kind:        "tunnels",

@@ -27,6 +27,12 @@ type Screen interface {
 	Resize(width, height int)
 }
 
+// Resumable is implemented by screens that need to refresh when they become
+// the active screen again after a child screen is popped.
+type Resumable interface {
+	Resume() tea.Cmd
+}
+
 // Action is a navigation request emitted by a screen.
 type Action int
 

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -98,6 +99,52 @@ func TestModelPushesAndPopsScreen(t *testing.T) {
 	}
 	if !strings.Contains(m.View().Content, "┌──────┐") {
 		t.Fatal("menu did not return after pop")
+	}
+}
+
+func TestModelOpensSessionsScreen(t *testing.T) {
+	m := newTestModel()
+	resize(t, m, 80, 24)
+
+	m.Update(press(tea.KeyDown, ""))
+	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	action := run(t, cmd).(screen.ActionMsg)
+	m.Update(action)
+
+	if title := m.stack.Top().Title(); title != "Sessions" {
+		t.Fatalf("screen title = %q, want Sessions", title)
+	}
+	if !strings.Contains(m.View().Content, "loading sessions…") {
+		t.Fatal("sessions screen content is missing")
+	}
+}
+
+type resumableStub struct {
+	resumed bool
+}
+
+func (s *resumableStub) Init() tea.Cmd                           { return nil }
+func (s *resumableStub) Update(tea.Msg) (screen.Screen, tea.Cmd) { return s, nil }
+func (s *resumableStub) View() string                            { return "child" }
+func (s *resumableStub) Title() string                           { return "child" }
+func (s *resumableStub) Keys() []key.Binding                     { return nil }
+func (s *resumableStub) Resize(int, int)                         {}
+func (s *resumableStub) Resume() tea.Cmd {
+	s.resumed = true
+	return nil
+}
+
+func TestModelResumesScreenAfterPop(t *testing.T) {
+	m := newTestModel()
+	resize(t, m, 80, 24)
+
+	revealed := &resumableStub{}
+	m.stack.Push(revealed)
+	m.stack.Push(&resumableStub{})
+	m.Update(screen.ActionMsg{Action: screen.ActionPop})
+
+	if !revealed.resumed {
+		t.Fatal("popping did not resume the revealed screen")
 	}
 }
 
