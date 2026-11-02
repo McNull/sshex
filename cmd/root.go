@@ -111,7 +111,7 @@ func init() {
 		return setupApplication(cmd)
 	}
 	rootCmd.SetHelpCommand(helpCmd)
-	rootCmd.AddCommand(connectCmd, tunnelCmd, execCmd, commandCmd, sessionCmd, serveCmd, uninstallCmd, updateCmd, completionsCmd, helpCmd, versionCheckCmd)
+	rootCmd.AddCommand(connectCmd, tunnelCmd, execCmd, commandCmd, sessionCmd, uiCmd, serveCmd, uninstallCmd, updateCmd, completionsCmd, helpCmd, versionCheckCmd)
 }
 
 var versionCheckCmd = &cobra.Command{
@@ -135,11 +135,30 @@ func checkVersionState(cmd *cobra.Command) {
 	if err != nil {
 		return
 	}
-	state, err := versioncheck.NewStore(path).Load()
-	if err == nil && versioncheck.IsNewer(state.AvailableVersion, assets.Version()) {
-		printUpdateAvailable(cmd.ErrOrStderr(), state.AvailableVersion)
+	if cmd != uiCmd {
+		if available := cachedUpdateVersion(path); available != "" {
+			printUpdateAvailable(cmd.ErrOrStderr(), available)
+		}
 	}
 	versioncheck.StartIfDue(path, launchVersionCheck, time.Now())
+}
+
+// updateAvailableVersion reports the cached newer version, if any. The UI
+// displays it below the logo instead of printing the CLI notice.
+func updateAvailableVersion() string {
+	path, err := versioncheck.DefaultPath()
+	if err != nil {
+		return ""
+	}
+	return cachedUpdateVersion(path)
+}
+
+func cachedUpdateVersion(path string) string {
+	state, err := versioncheck.NewStore(path).Load()
+	if err != nil || !versioncheck.IsNewer(state.AvailableVersion, assets.Version()) {
+		return ""
+	}
+	return state.AvailableVersion
 }
 
 func checkVersionSynchronously(cmd *cobra.Command, path string, source versioncheck.LatestSource) error {

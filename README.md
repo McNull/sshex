@@ -38,6 +38,17 @@ $ sshex tunnel add 8080
 $ sshex exec code .
 ```
 
+## Terminal UI
+
+`sshex ui` opens a full-screen terminal interface. The menu is the first
+implemented screen; Connect, Sessions, Tunnels, Commands and Update currently
+open placeholders while their views are built. The default monochrome theme
+adapts to light and dark terminals and respects `NO_COLOR`.
+
+```sh
+$ sshex ui
+```
+
 ## Command Execution
 
 Commands are templates stored on the origin. `sshex exec` runs them locally with the remote context.

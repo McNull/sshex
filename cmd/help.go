@@ -23,6 +23,7 @@ const rootHelp = `  Spawn ssh tunnels and execute commands from a remote shell.
     exec                  Execute a predefined command on the origin
     command               Manage predefined commands
     session               Manage sshex sessions
+    ui                    Open the interactive terminal interface
     uninstall             Remove the sshex installation from a machine
     update                Update sshex to the latest release
     completions           Generate shell completions for sshex
@@ -190,6 +191,20 @@ const sessionCloseHelp = `  Close a session and drop its tunnels.
     <id>                  The session id to close
 
   Options:
+    -h, --help            Show this help message and exit
+`
+
+const uiHelp = `  Open the interactive terminal interface.
+
+  Usage:
+    sshex ui [options]
+
+  Starts the full-screen terminal UI. It requires an interactive terminal;
+  stdin and stdout must both be a TTY. The UI can be exited with q or esc from
+  the main menu, or with ctrl+c at any time.
+
+  Options:
+        --theme <name>    Color theme (default: mono)
     -h, --help            Show this help message and exit
 `
 
@@ -373,6 +388,7 @@ var helpTexts = map[string]string{
 	"sshex session":         sessionHelp,
 	"sshex session list":    sessionListHelp,
 	"sshex session close":   sessionCloseHelp,
+	"sshex ui":              uiHelp,
 	"sshex exec":            execHelp,
 	"sshex command":         commandHelp,
 	"sshex command add":     commandAddHelp,
