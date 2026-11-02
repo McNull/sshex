@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -13,6 +14,7 @@ import (
 	"github.com/mcnull/sshex/internal/ui/screen"
 	"github.com/mcnull/sshex/internal/ui/screen/sessions"
 	"github.com/mcnull/sshex/internal/ui/screen/tunnels"
+	updatescreen "github.com/mcnull/sshex/internal/ui/screen/update"
 )
 
 func newTestModel() *Model {
@@ -137,6 +139,58 @@ func TestModelOpensCommandsScreen(t *testing.T) {
 	}
 	if !strings.Contains(m.View().Content, "loading commands…") {
 		t.Fatal("commands screen content is missing")
+	}
+}
+
+type fakeUpdateScreenSource struct {
+	snapshot updatescreen.Snapshot
+}
+
+func (s *fakeUpdateScreenSource) Load() (updatescreen.Snapshot, error) {
+	return s.snapshot, nil
+}
+
+type fakeUpdateScreenChecker struct{}
+
+func (fakeUpdateScreenChecker) Check() (updatescreen.CheckResult, error) {
+	return updatescreen.CheckResult{LatestVersion: "1.2.3", CheckedAt: time.Now()}, nil
+}
+
+type fakeUpdateScreenInstaller struct{}
+
+func (fakeUpdateScreenInstaller) Install() (updatescreen.Result, error) {
+	return updatescreen.Result{}, nil
+}
+
+func TestModelOpensUpdateScreen(t *testing.T) {
+	m := New(ModelOptions{
+		Version:           "1.2.3",
+		HasDarkBackground: true,
+		NoColor:           true,
+		UpdateSource: &fakeUpdateScreenSource{snapshot: updatescreen.Snapshot{
+			CurrentVersion: "1.2.3",
+		}},
+		UpdateChecker:   fakeUpdateScreenChecker{},
+		UpdateInstaller: fakeUpdateScreenInstaller{},
+	})
+	resize(t, m, 80, 24)
+
+	for range 4 {
+		m.Update(press(tea.KeyDown, ""))
+	}
+	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	action := run(t, cmd).(screen.ActionMsg)
+	m.Update(action)
+
+	if title := m.stack.Top().Title(); title != "Update" {
+		t.Fatalf("screen title = %q, want Update", title)
+	}
+	content := ansi.Strip(m.View().Content)
+	if !strings.Contains(content, "reading cached update state") {
+		t.Fatalf("update screen content is missing:\n%s", content)
+	}
+	if strings.Contains(content, "not implemented") {
+		t.Fatal("update screen still uses the placeholder")
 	}
 }
 

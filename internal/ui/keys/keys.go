@@ -303,6 +303,31 @@ func DefaultCommands() Commands {
 	}
 }
 
+// Update contains the bindings of the Update screen.
+type Update struct {
+	Check   key.Binding
+	Install key.Binding
+	Dismiss key.Binding
+}
+
+// DefaultUpdate returns the Update screen bindings.
+func DefaultUpdate() Update {
+	return Update{
+		Check: key.NewBinding(
+			key.WithKeys("enter", "r"),
+			key.WithHelp("enter/r", "check"),
+		),
+		Install: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "confirm"),
+		),
+		Dismiss: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "dismiss"),
+		),
+	}
+}
+
 // Confirm and Cancel are used by confirmation prompts.
 func Confirm() key.Binding {
 	return key.NewBinding(

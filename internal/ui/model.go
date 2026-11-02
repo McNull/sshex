@@ -12,9 +12,9 @@ import (
 	commandscreen "github.com/mcnull/sshex/internal/ui/screen/commands"
 	"github.com/mcnull/sshex/internal/ui/screen/connect"
 	"github.com/mcnull/sshex/internal/ui/screen/menu"
-	"github.com/mcnull/sshex/internal/ui/screen/placeholder"
 	"github.com/mcnull/sshex/internal/ui/screen/sessions"
 	tunnelscreen "github.com/mcnull/sshex/internal/ui/screen/tunnels"
+	updatescreen "github.com/mcnull/sshex/internal/ui/screen/update"
 	"github.com/mcnull/sshex/internal/ui/theme"
 )
 
@@ -49,6 +49,30 @@ type ModelOptions struct {
 	// CommandController mutates commands. Nil uses the live broker or the local
 	// config.
 	CommandController commandscreen.Controller
+	// UpdateSource supplies the cached update state. Nil reads version.yml.
+	UpdateSource updatescreen.Source
+	// UpdateChecker performs online version checks. Nil uses the release
+	// updater.
+	UpdateChecker updatescreen.Checker
+	// UpdateInstaller installs the latest release. Nil uses the release updater
+	// and this executable.
+	UpdateInstaller updatescreen.Installer
+}
+
+// screenDeps carries the injectable sources and controllers used by the menu
+// screens. Keeping them in one value avoids a long positional parameter list.
+type screenDeps struct {
+	connectSource     connect.HostSource
+	connectRunner     connect.Runner
+	sessionSource     sessions.Source
+	sessionCloser     sessions.Closer
+	tunnelSource      tunnelscreen.Source
+	tunnelController  tunnelscreen.Controller
+	commandSource     commandscreen.Source
+	commandController commandscreen.Controller
+	updateSource      updatescreen.Source
+	updateChecker     updatescreen.Checker
+	updateInstaller   updatescreen.Installer
 }
 
 // Model is the root Bubble Tea model. It owns the chrome, the theme and the
@@ -121,6 +145,22 @@ func New(opts ModelOptions) *Model {
 		}
 	}
 
+	updateSource := opts.UpdateSource
+	updateChecker := opts.UpdateChecker
+	updateInstaller := opts.UpdateInstaller
+	if updateSource == nil || updateChecker == nil || updateInstaller == nil {
+		control := newUpdateControl(opts.Version)
+		if updateSource == nil {
+			updateSource = control
+		}
+		if updateChecker == nil {
+			updateChecker = control
+		}
+		if updateInstaller == nil {
+			updateInstaller = control
+		}
+	}
+
 	m := &Model{
 		styles:    &styles,
 		themeName: resolved.Name,
@@ -129,7 +169,19 @@ func New(opts ModelOptions) *Model {
 		header:    header.New(&styles),
 		footer:    footer.New(&styles),
 		stack: screen.NewStack(menu.New(
-			defaultMenuItems(&styles, source, runner, sessionSource, sessionCloser, tunnelSource, tunnelController, commandSource, commandController),
+			defaultMenuItems(&styles, screenDeps{
+				connectSource:     source,
+				connectRunner:     runner,
+				sessionSource:     sessionSource,
+				sessionCloser:     sessionCloser,
+				tunnelSource:      tunnelSource,
+				tunnelController:  tunnelController,
+				commandSource:     commandSource,
+				commandController: commandController,
+				updateSource:      updateSource,
+				updateChecker:     updateChecker,
+				updateInstaller:   updateInstaller,
+			}),
 			opts.Version,
 			opts.UpdateAvailable,
 			&styles,
@@ -260,13 +312,13 @@ func (m *Model) setDarkBackground(dark bool) {
 	*m.styles = theme.NewStyles(resolved)
 }
 
-func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner connect.Runner, sessionSource sessions.Source, sessionCloser sessions.Closer, tunnelSource tunnelscreen.Source, tunnelController tunnelscreen.Controller, commandSource commandscreen.Source, commandController commandscreen.Controller) []menu.Item {
+func defaultMenuItems(styles *theme.Styles, deps screenDeps) []menu.Item {
 	// Keep one Connect screen for the lifetime of the UI so its query,
 	// selection and scroll position survive a trip back to the menu.
 	connectScreen := connect.New(connect.Options{
 		Styles: styles,
-		Source: source,
-		Runner: runner,
+		Source: deps.connectSource,
+		Runner: deps.connectRunner,
 	})
 
 	// The add form is the same screen from both tunnel scopes. The menu flow
@@ -274,7 +326,7 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 	newAddForm := func(sessionID, target string) screen.Screen {
 		return tunnelscreen.NewAddForm(tunnelscreen.AddFormOptions{
 			Styles:     styles,
-			Controller: tunnelController,
+			Controller: deps.tunnelController,
 			SessionID:  sessionID,
 			Target:     target,
 		})
@@ -284,8 +336,8 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 	// makes it a single enter away from the add form inside a remote shell.
 	sessionPicker := sessions.New(sessions.Options{
 		Styles: styles,
-		Source: sessionSource,
-		Closer: sessionCloser,
+		Source: deps.sessionSource,
+		Closer: deps.sessionCloser,
 		OnSelect: func(session sessions.Session) tea.Cmd {
 			return screen.Replace(newAddForm(session.ID, session.Target))
 		},
@@ -300,8 +352,8 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 		}
 		opened := tunnelscreen.New(tunnelscreen.Options{
 			Styles:     styles,
-			Source:     tunnelSource,
-			Controller: tunnelController,
+			Source:     deps.tunnelSource,
+			Controller: deps.tunnelController,
 			SessionID:  sessionID,
 			Target:     target,
 			AddOpener:  func() screen.Screen { return newAddForm(sessionID, target) },
@@ -311,8 +363,8 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 	}
 	allTunnelsScreen := tunnelscreen.New(tunnelscreen.Options{
 		Styles:     styles,
-		Source:     tunnelSource,
-		Controller: tunnelController,
+		Source:     deps.tunnelSource,
+		Controller: deps.tunnelController,
 		AddOpener:  func() screen.Screen { return sessionPicker },
 	})
 
@@ -320,8 +372,8 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 	// round-trip; it reloads its data whenever it is opened.
 	sessionsScreen := sessions.New(sessions.Options{
 		Styles:       styles,
-		Source:       sessionSource,
-		Closer:       sessionCloser,
+		Source:       deps.sessionSource,
+		Closer:       deps.sessionCloser,
 		TunnelOpener: openSessionTunnels,
 	})
 
@@ -329,19 +381,28 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 	// add/edit form and receives that set for uniqueness checks.
 	newCommandForm := func(opts commandscreen.FormOptions) screen.Screen {
 		opts.Styles = styles
-		opts.Controller = commandController
+		opts.Controller = deps.commandController
 		return commandscreen.NewForm(opts)
 	}
 	commandsScreen := commandscreen.New(commandscreen.Options{
 		Styles:     styles,
-		Source:     commandSource,
-		Controller: commandController,
+		Source:     deps.commandSource,
+		Controller: deps.commandController,
 		AddOpener: func(existing []commandscreen.Command) screen.Screen {
 			return newCommandForm(commandscreen.FormOptions{Existing: existing})
 		},
 		EditOpener: func(existing []commandscreen.Command, original commandscreen.Command) screen.Screen {
 			return newCommandForm(commandscreen.FormOptions{Existing: existing, Original: &original})
 		},
+	})
+
+	// Keep one Update screen so a dismissed prompt is not recreated by a trip
+	// back to the menu. It still reloads and checks on every visit.
+	updateScreen := updatescreen.New(updatescreen.Options{
+		Styles:    styles,
+		Source:    deps.updateSource,
+		Checker:   deps.updateChecker,
+		Installer: deps.updateInstaller,
 	})
 
 	return []menu.Item{
@@ -373,9 +434,7 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 			Kind:        "update",
 			Title:       "Update",
 			Description: "Check for updates",
-			Open: func() screen.Screen {
-				return placeholder.New("Update", "Check for updates", styles)
-			},
+			Open:        func() screen.Screen { return updateScreen },
 		},
 	}
 }
