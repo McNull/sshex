@@ -191,7 +191,7 @@ func (m *Model) Keys() []key.Binding {
 		if !m.picker() {
 			screenKeys = append(screenKeys, m.keys.Close)
 		}
-		return append(screenKeys, m.keys.Refresh, m.keys.FocusSearch, m.keys.Backspace, keys.Back())
+		return append(screenKeys, m.keys.Refresh, m.keys.FocusSearch, keys.Back())
 	}
 	return []key.Binding{m.keys.SearchUp, m.keys.SearchDown, m.openBinding(), m.keys.FocusList, keys.Back()}
 }

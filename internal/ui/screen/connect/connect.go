@@ -105,7 +105,7 @@ func (m *Model) Title() string { return "Connect" }
 // Keys implements screen.Screen.
 func (m *Model) Keys() []key.Binding {
 	if m.focus == focusList {
-		return []key.Binding{m.keys.Up, m.keys.Down, m.keys.Select, m.keys.FocusSearch, m.keys.Backspace, keys.Back()}
+		return []key.Binding{m.keys.Up, m.keys.Down, m.keys.Select, m.keys.FocusSearch, keys.Back()}
 	}
 	return []key.Binding{m.keys.Up, m.keys.Down, m.keys.Select, m.keys.FocusList, keys.Back()}
 }

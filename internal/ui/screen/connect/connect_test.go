@@ -439,7 +439,12 @@ func TestKeysFollowFocus(t *testing.T) {
 		t.Fatalf("search keys = %d, want 5", len(m.Keys()))
 	}
 	m.Update(press(tea.KeyTab, ""))
-	if len(m.Keys()) != 6 {
-		t.Fatalf("list keys = %d, want 6", len(m.Keys()))
+	if len(m.Keys()) != 5 {
+		t.Fatalf("list keys = %d, want 5", len(m.Keys()))
+	}
+	for _, binding := range m.Keys() {
+		if binding.Help().Desc == "edit" {
+			t.Fatal("list focus should not advertise backspace edit in the help")
+		}
 	}
 }
