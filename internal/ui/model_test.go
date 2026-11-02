@@ -82,8 +82,8 @@ func TestModelPushesAndPopsScreen(t *testing.T) {
 	if m.stack.Len() != 2 {
 		t.Fatalf("stack length = %d, want 2", m.stack.Len())
 	}
-	if !strings.Contains(m.View().Content, "This screen is not implemented yet.") {
-		t.Fatal("placeholder content is missing")
+	if !strings.Contains(m.View().Content, "loading hosts…") {
+		t.Fatal("connect screen content is missing")
 	}
 
 	_, cmd = m.Update(press(tea.KeyEsc, ""))
@@ -98,6 +98,37 @@ func TestModelPushesAndPopsScreen(t *testing.T) {
 	}
 	if !strings.Contains(m.View().Content, "┌──────┐") {
 		t.Fatal("menu did not return after pop")
+	}
+}
+
+func TestConnectStateSurvivesMenuRoundTrip(t *testing.T) {
+	m := newTestModel()
+	resize(t, m, 80, 24)
+
+	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	action := run(t, cmd).(screen.ActionMsg)
+	m.Update(action)
+	first := m.stack.Top()
+
+	m.Update(press('w', "w"))
+	m.Update(press('e', "e"))
+
+	_, cmd = m.Update(press(tea.KeyEsc, ""))
+	action = run(t, cmd).(screen.ActionMsg)
+	m.Update(action)
+	if m.stack.Len() != 1 {
+		t.Fatalf("stack length = %d, want 1", m.stack.Len())
+	}
+
+	_, cmd = m.Update(press(tea.KeyEnter, ""))
+	action = run(t, cmd).(screen.ActionMsg)
+	m.Update(action)
+
+	if m.stack.Top() != first {
+		t.Fatal("connect screen was recreated instead of restored")
+	}
+	if !strings.Contains(ansi.Strip(m.View().Content), "search › we") {
+		t.Fatal("connect search input was not restored")
 	}
 }
 

@@ -135,7 +135,7 @@ func checkVersionState(cmd *cobra.Command) {
 	if err != nil {
 		return
 	}
-	if cmd != uiCmd {
+	if cmd != uiCmd && !bannerSuppressed() {
 		if available := cachedUpdateVersion(path); available != "" {
 			printUpdateAvailable(cmd.ErrOrStderr(), available)
 		}

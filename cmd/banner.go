@@ -19,13 +19,19 @@ var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 // explicitly marked as interactive via bannerAnnotation. The banner is hidden
 // entirely in demo mode so recordings stay clean.
 func showBanner(cmd *cobra.Command) bool {
-	if recordDemoMode() {
+	if recordDemoMode() || bannerSuppressed() {
 		return false
 	}
 	if cmd == rootCmd {
 		return true
 	}
 	return cmd.Annotations[bannerAnnotation] == "true"
+}
+
+// bannerSuppressed reports whether the caller asked to keep the terminal clean
+// for a session it launched itself, such as one started from the TUI.
+func bannerSuppressed() bool {
+	return os.Getenv("SSHEX_NO_BANNER") != ""
 }
 
 // isColorTerminal reports whether colors should be emitted to w. It is false

@@ -52,6 +52,18 @@ func TestShowBanner(t *testing.T) {
 	}
 }
 
+func TestShowBannerSuppressed(t *testing.T) {
+	t.Setenv("SSHEX_NO_BANNER", "1")
+
+	if showBanner(rootCmd) {
+		t.Error("showBanner(rootCmd) = true with SSHEX_NO_BANNER, want false")
+	}
+	annotated := &cobra.Command{Annotations: map[string]string{bannerAnnotation: "true"}}
+	if showBanner(annotated) {
+		t.Error("showBanner(annotated) = true with SSHEX_NO_BANNER, want false")
+	}
+}
+
 func TestShowBannerDemoMode(t *testing.T) {
 	orig := recordDemoMode
 	recordDemoMode = func() bool { return true }

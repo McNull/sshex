@@ -23,6 +23,7 @@ type Tokens struct {
 	Accent              color.Color
 	AccentForeground    color.Color
 	Selection           color.Color
+	SelectionFocus      color.Color
 	SelectionForeground color.Color
 	Border              color.Color
 	Success             color.Color
@@ -95,6 +96,7 @@ func mono(dark bool) Tokens {
 			Accent:              lipgloss.Color("#ffffff"),
 			AccentForeground:    lipgloss.Color("#0b0b0b"),
 			Selection:           lipgloss.Color("#262626"),
+			SelectionFocus:      lipgloss.Color("#3f3f3f"),
 			SelectionForeground: lipgloss.Color("#ffffff"),
 			Border:              lipgloss.Color("#3a3a3a"),
 			Success:             lipgloss.Color("#7ac77a"),
@@ -109,6 +111,7 @@ func mono(dark bool) Tokens {
 		Accent:              lipgloss.Color("#111111"),
 		AccentForeground:    lipgloss.Color("#ffffff"),
 		Selection:           lipgloss.Color("#e6e6e6"),
+		SelectionFocus:      lipgloss.Color("#d0d0d0"),
 		SelectionForeground: lipgloss.Color("#111111"),
 		Border:              lipgloss.Color("#cccccc"),
 		Success:             lipgloss.Color("#2f7d32"),
@@ -120,27 +123,37 @@ func mono(dark bool) Tokens {
 // Styles are the reusable styles derived from a theme. Construct them once,
 // then pass them to every screen.
 type Styles struct {
-	Brand           lipgloss.Style
-	BrandAccent     lipgloss.Style
-	Version         lipgloss.Style
-	Rule            lipgloss.Style
-	FooterKey       lipgloss.Style
-	FooterDesc      lipgloss.Style
-	FooterSeparator lipgloss.Style
-	Logo            lipgloss.Style
-	MenuItem        lipgloss.Style
-	MenuRow         lipgloss.Style
-	MenuRowSelected lipgloss.Style
-	MenuMarker      lipgloss.Style
-	MenuDescription lipgloss.Style
-	ScreenTitle     lipgloss.Style
-	ScreenSubtitle  lipgloss.Style
-	ScreenBody      lipgloss.Style
-	ScreenHint      lipgloss.Style
-	Foreground      lipgloss.Style
-	Muted           lipgloss.Style
-	Accent          lipgloss.Style
-	Error           lipgloss.Style
+	Brand                  lipgloss.Style
+	BrandAccent            lipgloss.Style
+	Version                lipgloss.Style
+	Rule                   lipgloss.Style
+	FooterKey              lipgloss.Style
+	FooterDesc             lipgloss.Style
+	FooterSeparator        lipgloss.Style
+	Logo                   lipgloss.Style
+	MenuItem               lipgloss.Style
+	MenuRow                lipgloss.Style
+	MenuRowSelected        lipgloss.Style
+	MenuMarker             lipgloss.Style
+	MenuDescription        lipgloss.Style
+	InputText              lipgloss.Style
+	InputPlaceholder       lipgloss.Style
+	InputPrompt            lipgloss.Style
+	Cursor                 lipgloss.Style
+	ListRow                lipgloss.Style
+	ListRowSelected        lipgloss.Style
+	ListRowSelectedBlurred lipgloss.Style
+	ListHeader             lipgloss.Style
+	ListMarker             lipgloss.Style
+	ListDescription        lipgloss.Style
+	ScreenTitle            lipgloss.Style
+	ScreenSubtitle         lipgloss.Style
+	ScreenBody             lipgloss.Style
+	ScreenHint             lipgloss.Style
+	Foreground             lipgloss.Style
+	Muted                  lipgloss.Style
+	Accent                 lipgloss.Style
+	Error                  lipgloss.Style
 }
 
 // NewStyles builds the style set for a resolved theme.
@@ -164,8 +177,23 @@ func NewStyles(t Theme) Styles {
 			Foreground(t.Tokens.SelectionForeground).
 			Background(t.Tokens.Selection).
 			Bold(true),
-		MenuMarker:      lipgloss.NewStyle().Foreground(t.Tokens.Accent).Bold(true),
-		MenuDescription: lipgloss.NewStyle().Foreground(t.Tokens.Muted),
+		MenuMarker:       lipgloss.NewStyle().Foreground(t.Tokens.Accent).Bold(true),
+		MenuDescription:  lipgloss.NewStyle().Foreground(t.Tokens.Muted),
+		InputText:        lipgloss.NewStyle().Foreground(t.Tokens.Foreground),
+		InputPlaceholder: lipgloss.NewStyle().Foreground(t.Tokens.Faint),
+		InputPrompt:      lipgloss.NewStyle().Foreground(t.Tokens.Accent).Bold(true),
+		Cursor:           lipgloss.NewStyle().Foreground(t.Tokens.Accent),
+		ListRow:          lipgloss.NewStyle(),
+		ListRowSelected: lipgloss.NewStyle().
+			Foreground(t.Tokens.SelectionForeground).
+			Background(t.Tokens.SelectionFocus).
+			Bold(true),
+		ListRowSelectedBlurred: lipgloss.NewStyle().
+			Foreground(t.Tokens.Muted).
+			Background(t.Tokens.Selection),
+		ListHeader:      lipgloss.NewStyle().Foreground(t.Tokens.Muted).Bold(true),
+		ListMarker:      lipgloss.NewStyle().Foreground(t.Tokens.Accent).Bold(true),
+		ListDescription: lipgloss.NewStyle().Foreground(t.Tokens.Muted),
 		ScreenTitle:     lipgloss.NewStyle().Foreground(t.Tokens.Foreground).Bold(true),
 		ScreenSubtitle:  lipgloss.NewStyle().Foreground(t.Tokens.Muted),
 		ScreenBody:      lipgloss.NewStyle().Foreground(t.Tokens.Muted),
@@ -190,16 +218,28 @@ func noColorStyles() Styles {
 		MenuItem:        lipgloss.NewStyle(),
 		MenuRow:         lipgloss.NewStyle(),
 		// Reverse keeps the selection visible without relying on color.
-		MenuRowSelected: lipgloss.NewStyle().Bold(true).Reverse(true),
-		MenuMarker:      lipgloss.NewStyle().Bold(true),
-		MenuDescription: lipgloss.NewStyle(),
-		ScreenTitle:     lipgloss.NewStyle().Bold(true),
-		ScreenSubtitle:  lipgloss.NewStyle(),
-		ScreenBody:      lipgloss.NewStyle(),
-		ScreenHint:      lipgloss.NewStyle(),
-		Foreground:      lipgloss.NewStyle(),
-		Muted:           lipgloss.NewStyle(),
-		Accent:          lipgloss.NewStyle().Bold(true),
-		Error:           lipgloss.NewStyle().Bold(true),
+		MenuRowSelected:  lipgloss.NewStyle().Bold(true).Reverse(true),
+		MenuMarker:       lipgloss.NewStyle().Bold(true),
+		MenuDescription:  lipgloss.NewStyle(),
+		InputText:        lipgloss.NewStyle(),
+		InputPlaceholder: lipgloss.NewStyle(),
+		InputPrompt:      lipgloss.NewStyle().Bold(true),
+		Cursor:           lipgloss.NewStyle(),
+		ListRow:          lipgloss.NewStyle(),
+		// Reverse keeps the selection visible without relying on color; the
+		// focused row is bold so focus still reads.
+		ListRowSelected:        lipgloss.NewStyle().Bold(true).Reverse(true),
+		ListRowSelectedBlurred: lipgloss.NewStyle().Reverse(true),
+		ListHeader:             lipgloss.NewStyle().Bold(true),
+		ListMarker:             lipgloss.NewStyle().Bold(true),
+		ListDescription:        lipgloss.NewStyle(),
+		ScreenTitle:            lipgloss.NewStyle().Bold(true),
+		ScreenSubtitle:         lipgloss.NewStyle(),
+		ScreenBody:             lipgloss.NewStyle(),
+		ScreenHint:             lipgloss.NewStyle(),
+		Foreground:             lipgloss.NewStyle(),
+		Muted:                  lipgloss.NewStyle(),
+		Accent:                 lipgloss.NewStyle().Bold(true),
+		Error:                  lipgloss.NewStyle().Bold(true),
 	}
 }

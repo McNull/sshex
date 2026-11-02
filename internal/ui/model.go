@@ -9,6 +9,7 @@ import (
 	"github.com/mcnull/sshex/internal/ui/component/header"
 	"github.com/mcnull/sshex/internal/ui/keys"
 	"github.com/mcnull/sshex/internal/ui/screen"
+	"github.com/mcnull/sshex/internal/ui/screen/connect"
 	"github.com/mcnull/sshex/internal/ui/screen/menu"
 	"github.com/mcnull/sshex/internal/ui/screen/placeholder"
 	"github.com/mcnull/sshex/internal/ui/theme"
@@ -26,6 +27,10 @@ type ModelOptions struct {
 	Theme             string
 	HasDarkBackground bool
 	NoColor           bool
+	// HostSource supplies the Connect screen. Nil uses the local SSH files.
+	HostSource connect.HostSource
+	// Runner starts sessions from the Connect screen. Nil runs this binary.
+	Runner connect.Runner
 }
 
 // Model is the root Bubble Tea model. It owns the chrome, the theme and the
@@ -53,6 +58,15 @@ func New(opts ModelOptions) *Model {
 	})
 	styles := theme.NewStyles(resolved)
 
+	source := opts.HostSource
+	if source == nil {
+		source = sshHostSource{}
+	}
+	runner := opts.Runner
+	if runner == nil {
+		runner = connect.NewExecRunner()
+	}
+
 	m := &Model{
 		styles:    &styles,
 		themeName: resolved.Name,
@@ -60,7 +74,12 @@ func New(opts ModelOptions) *Model {
 		global:    keys.DefaultGlobal(),
 		header:    header.New(&styles),
 		footer:    footer.New(&styles),
-		stack:     screen.NewStack(menu.New(defaultMenuItems(&styles), opts.Version, opts.UpdateAvailable, &styles)),
+		stack: screen.NewStack(menu.New(
+			defaultMenuItems(&styles, source, runner),
+			opts.Version,
+			opts.UpdateAvailable,
+			&styles,
+		)),
 	}
 	return m
 }
@@ -175,15 +194,21 @@ func (m *Model) setDarkBackground(dark bool) {
 	*m.styles = theme.NewStyles(resolved)
 }
 
-func defaultMenuItems(styles *theme.Styles) []menu.Item {
+func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner connect.Runner) []menu.Item {
+	// Keep one Connect screen for the lifetime of the UI so its query,
+	// selection and scroll position survive a trip back to the menu.
+	connectScreen := connect.New(connect.Options{
+		Styles: styles,
+		Source: source,
+		Runner: runner,
+	})
+
 	return []menu.Item{
 		{
 			Kind:        "connect",
 			Title:       "Connect",
 			Description: "Open an SSH session",
-			Open: func() screen.Screen {
-				return placeholder.New("Connect", "Open an SSH session", styles)
-			},
+			Open:        func() screen.Screen { return connectScreen },
 		},
 		{
 			Kind:        "sessions",

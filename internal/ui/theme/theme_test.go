@@ -26,6 +26,21 @@ func TestLoadNoColorDropsTokens(t *testing.T) {
 	}
 }
 
+func TestListSelectionFocusStyles(t *testing.T) {
+	dark := NewStyles(Load(Options{Name: DefaultName, HasDarkBackground: true}))
+	if fmt.Sprint(dark.ListRowSelected.GetBackground()) == fmt.Sprint(dark.ListRowSelectedBlurred.GetBackground()) {
+		t.Fatal("focused list selection should use a different background")
+	}
+
+	noColor := NewStyles(Load(Options{Name: DefaultName, NoColor: true}))
+	if !noColor.ListRowSelected.GetBold() || noColor.ListRowSelectedBlurred.GetBold() {
+		t.Fatal("only the focused list selection should be bold in no-color mode")
+	}
+	if !noColor.ListRowSelected.GetReverse() || !noColor.ListRowSelectedBlurred.GetReverse() {
+		t.Fatal("both list selection states should use reverse video in no-color mode")
+	}
+}
+
 func TestMonoAdaptsToBackground(t *testing.T) {
 	dark := Load(Options{Name: DefaultName, HasDarkBackground: true})
 	light := Load(Options{Name: DefaultName, HasDarkBackground: false})

@@ -50,6 +50,46 @@ func DefaultMenu() Menu {
 	}
 }
 
+// Connect contains the bindings of the Connect screen.
+type Connect struct {
+	Up          key.Binding
+	Down        key.Binding
+	Select      key.Binding
+	FocusList   key.Binding
+	FocusSearch key.Binding
+	Backspace   key.Binding
+}
+
+// DefaultConnect returns the Connect screen bindings.
+func DefaultConnect() Connect {
+	return Connect{
+		Up: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑/k", "up"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓/j", "down"),
+		),
+		Select: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "connect"),
+		),
+		FocusList: key.NewBinding(
+			key.WithKeys("tab", "shift+tab"),
+			key.WithHelp("tab", "hosts"),
+		),
+		FocusSearch: key.NewBinding(
+			key.WithKeys("tab", "shift+tab"),
+			key.WithHelp("tab", "search"),
+		),
+		Backspace: key.NewBinding(
+			key.WithKeys("backspace"),
+			key.WithHelp("⌫", "edit"),
+		),
+	}
+}
+
 // Back returns the binding used by child screens to return to the previous
 // screen.
 func Back() key.Binding {
