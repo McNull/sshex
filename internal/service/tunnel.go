@@ -81,7 +81,7 @@ func (s *TunnelService) Add(ctx context.Context, req AddTunnelRequest) (model.Tu
 			return model.Tunnel{}, err
 		}
 		if inUse {
-			return model.Tunnel{}, fmt.Errorf("%w: local port %d is already in use", repository.ErrConflict, req.LocalPort)
+			return model.Tunnel{}, fmt.Errorf("%w: local port %d is already in use on origin %s", repository.ErrConflict, req.LocalPort, session.Origin)
 		}
 	}
 

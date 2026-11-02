@@ -44,8 +44,10 @@ func TestTunnelServiceAddPortInUse(t *testing.T) {
 	if !errors.Is(err, repository.ErrConflict) {
 		t.Fatalf("Add() error = %v, want ErrConflict", err)
 	}
-	if !strings.Contains(err.Error(), "already in use") {
-		t.Fatalf("Add() error = %q, want message containing %q", err, "already in use")
+	for _, want := range []string{"local port 8080", "already in use", "origin origin-host"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Add() error = %q, want message containing %q", err, want)
+		}
 	}
 	if conn.addLocalForwards != 0 {
 		t.Fatalf("Add() attempted %d forwards, want 0", conn.addLocalForwards)
@@ -106,7 +108,7 @@ func TestTunnelServiceAddLocalDefaultsDirection(t *testing.T) {
 
 func seedActiveSession(t *testing.T, svc testServices, id string) *fakeConn {
 	t.Helper()
-	if err := svc.sessionRepo.Create(context.Background(), model.Session{ID: id, State: model.SessionActive}); err != nil {
+	if err := svc.sessionRepo.Create(context.Background(), model.Session{ID: id, Origin: "origin-host", State: model.SessionActive}); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
 	conn := &fakeConn{}
