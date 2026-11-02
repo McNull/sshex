@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -33,7 +34,25 @@ type testEnv struct {
 	sessions    *memory.SessionRepository
 	connections *memory.ConnectionRepository
 	commands    *memory.CommandRepository
+	pool        *sshx.Pool
 }
+
+type stubCommandRunner struct {
+	output string
+	err    error
+}
+
+func (s stubCommandRunner) Run(_ context.Context, _ string, _ io.Reader, stdout, _ io.Writer) error {
+	if s.output != "" && stdout != nil {
+		_, _ = io.WriteString(stdout, s.output)
+	}
+	return s.err
+}
+
+const portFixture = `@@ss
+LISTEN 0 4096 127.0.0.1:8080 0.0.0.0:* users:(("node",pid=321,fd=20))
+LISTEN 0 4096 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=1,fd=3))
+`
 
 func newTestEnv() testEnv {
 	sessionRepo := memory.NewSessionRepository()
@@ -73,12 +92,19 @@ func newTestEnv() testEnv {
 			Commands: commandRepo,
 			Executor: local.NewExecutor(),
 		}),
+		Listening: service.NewListeningService(service.ListeningServiceConfig{
+			Sessions: sessionRepo,
+			Pool:     pool,
+			Local:    stubCommandRunner{output: portFixture},
+			Probe:    service.NewPosixPortProbe(),
+		}),
 	}
 	return testEnv{
 		handler:     NewRouter(NewHandlers(services, auth)),
 		sessions:    sessionRepo,
 		connections: connectionRepo,
 		commands:    commandRepo,
+		pool:        pool,
 	}
 }
 
@@ -400,5 +426,86 @@ func TestCommandMutationsRequireCommandsCapability(t *testing.T) {
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("%s %s with restricted token status = %d, want 401: %s", tc.method, tc.path, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+func TestListSessionsSuccess(t *testing.T) {
+	env := newTestEnv()
+	seedSession(t, env)
+
+	rec := do(t, env.handler, http.MethodGet, "/sessions", "", true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"id":"s1"`) {
+		t.Fatalf("body = %q, want session s1", rec.Body.String())
+	}
+}
+
+func TestGetSessionSuccess(t *testing.T) {
+	env := newTestEnv()
+	seedSession(t, env)
+
+	rec := do(t, env.handler, http.MethodGet, "/sessions/s1", "", true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"id":"s1"`) {
+		t.Fatalf("body = %q, want session s1", rec.Body.String())
+	}
+}
+
+func TestListPortsLocal(t *testing.T) {
+	env := newTestEnv()
+	seedSession(t, env)
+
+	rec := do(t, env.handler, http.MethodGet, "/sessions/s1/ports?host=local", "", true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, want := range []string{`"port":8080`, `"process":"node"`, `"pid":321`, `"port":22`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("body = %q, want %s", body, want)
+		}
+	}
+}
+
+func TestListPortsRequiresAuth(t *testing.T) {
+	env := newTestEnv()
+	seedSession(t, env)
+
+	rec := do(t, env.handler, http.MethodGet, "/sessions/s1/ports?host=local", "", false)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestListPortsInvalidHost(t *testing.T) {
+	env := newTestEnv()
+	seedSession(t, env)
+
+	rec := do(t, env.handler, http.MethodGet, "/sessions/s1/ports?host=elsewhere", "", true)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestListPortsMissingSession(t *testing.T) {
+	env := newTestEnv()
+
+	rec := do(t, env.handler, http.MethodGet, "/sessions/missing/ports?host=local", "", true)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestListPortsRemoteWithoutController(t *testing.T) {
+	env := newTestEnv()
+	seedSession(t, env)
+
+	rec := do(t, env.handler, http.MethodGet, "/sessions/s1/ports?host=remote", "", true)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: %s", rec.Code, rec.Body.String())
 	}
 }

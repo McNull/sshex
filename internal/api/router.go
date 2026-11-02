@@ -19,6 +19,7 @@ func NewRouter(handlers *Handlers) http.Handler {
 	mux.HandleFunc("POST /sessions/{id}/tunnels", handlers.CreateTunnel)
 	mux.HandleFunc("DELETE /sessions/{id}/tunnels/{port}", handlers.DeleteTunnel)
 	mux.HandleFunc("DELETE /sessions/{id}/tunnels/by-id/{tunnelID}", handlers.DeleteTunnelByID)
+	mux.HandleFunc("GET /sessions/{id}/ports", handlers.ListPorts)
 
 	mux.HandleFunc("POST /sessions/{id}/exec", handlers.Exec)
 

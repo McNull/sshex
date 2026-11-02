@@ -43,6 +43,9 @@ type ModelOptions struct {
 	TunnelSource tunnelscreen.Source
 	// TunnelController adds and removes tunnels. Nil uses the live broker.
 	TunnelController tunnelscreen.Controller
+	// PortSource supplies the listening ports shown by the add form. Nil uses
+	// the live broker.
+	PortSource tunnelscreen.PortSource
 	// CommandSource supplies the Commands screen. Nil uses the live broker or
 	// the local config.
 	CommandSource commandscreen.Source
@@ -68,6 +71,7 @@ type screenDeps struct {
 	sessionCloser     sessions.Closer
 	tunnelSource      tunnelscreen.Source
 	tunnelController  tunnelscreen.Controller
+	portSource        tunnelscreen.PortSource
 	commandSource     commandscreen.Source
 	commandController commandscreen.Controller
 	updateSource      updatescreen.Source
@@ -133,6 +137,11 @@ func New(opts ModelOptions) *Model {
 		}
 	}
 
+	portSource := opts.PortSource
+	if portSource == nil {
+		portSource = portControl{}
+	}
+
 	commandSource := opts.CommandSource
 	commandController := opts.CommandController
 	if commandSource == nil || commandController == nil {
@@ -176,6 +185,7 @@ func New(opts ModelOptions) *Model {
 				sessionCloser:     sessionCloser,
 				tunnelSource:      tunnelSource,
 				tunnelController:  tunnelController,
+				portSource:        portSource,
 				commandSource:     commandSource,
 				commandController: commandController,
 				updateSource:      updateSource,
@@ -327,6 +337,7 @@ func defaultMenuItems(styles *theme.Styles, deps screenDeps) []menu.Item {
 		return tunnelscreen.NewAddForm(tunnelscreen.AddFormOptions{
 			Styles:     styles,
 			Controller: deps.tunnelController,
+			PortSource: deps.portSource,
 			SessionID:  sessionID,
 			Target:     target,
 		})

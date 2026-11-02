@@ -92,6 +92,13 @@ func New(cfg config.Config, configPath string) (*App, error) {
 	})
 	commands.SetOnChange(sessions.PublishAliases)
 
+	listening := service.NewListeningService(service.ListeningServiceConfig{
+		Sessions: sessionRepo,
+		Pool:     pool,
+		Local:    local.NewRunner(),
+		Probe:    service.NewPosixPortProbe(),
+	})
+
 	installs := service.NewInstallService(service.InstallServiceConfig{
 		Transport:   transport,
 		Installer:   installer,
@@ -105,9 +112,10 @@ func New(cfg config.Config, configPath string) (*App, error) {
 	})
 
 	handlers := api.NewHandlers(api.Services{
-		Sessions: sessions,
-		Tunnels:  tunnels,
-		Commands: commands,
+		Sessions:  sessions,
+		Tunnels:   tunnels,
+		Commands:  commands,
+		Listening: listening,
 	}, auth)
 	handler := api.NewRouter(handlers)
 	sessions.SetHandler(handler)

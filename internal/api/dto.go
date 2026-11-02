@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/mcnull/sshex/internal/model"
+	"github.com/mcnull/sshex/internal/service"
 )
 
 type CreateSessionRequest struct {
@@ -71,6 +72,14 @@ type TunnelResponse struct {
 	CreatedAt  time.Time              `json:"created_at"`
 }
 
+// ListeningPortResponse is one listening TCP port returned to the UI.
+type ListeningPortResponse struct {
+	Port    int    `json:"port"`
+	Address string `json:"address,omitempty"`
+	Process string `json:"process,omitempty"`
+	PID     int    `json:"pid,omitempty"`
+}
+
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
@@ -106,6 +115,15 @@ func NewCreateSessionResponse(session model.Session, connection model.Connection
 		Session:             NewSessionResponse(session),
 		Connection:          NewConnectionResponse(connection),
 		HeartbeatIntervalMS: int(heartbeatInterval / time.Millisecond),
+	}
+}
+
+func NewListeningPortResponse(port service.ListeningPort) ListeningPortResponse {
+	return ListeningPortResponse{
+		Port:    port.Port,
+		Address: port.Address,
+		Process: port.Process,
+		PID:     port.PID,
 	}
 }
 

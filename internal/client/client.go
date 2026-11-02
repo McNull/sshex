@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/mcnull/sshex/internal/api"
@@ -110,6 +111,15 @@ func (c *Client) ListTunnels(ctx context.Context) ([]api.TunnelResponse, error) 
 	var tunnels []api.TunnelResponse
 	err := c.request(ctx, http.MethodGet, "/sessions/"+c.sessionID+"/tunnels", nil, &tunnels)
 	return tunnels, err
+}
+
+// ListPorts returns the listening TCP ports of one side of the session. Host
+// is "local" or "remote".
+func (c *Client) ListPorts(ctx context.Context, host string) ([]api.ListeningPortResponse, error) {
+	var ports []api.ListeningPortResponse
+	path := "/sessions/" + c.sessionID + "/ports?host=" + url.QueryEscape(host)
+	err := c.request(ctx, http.MethodGet, path, nil, &ports)
+	return ports, err
 }
 
 func (c *Client) AddTunnel(ctx context.Context, localPort int, targetHost string, targetPort int, direction model.ForwardDirection) (api.TunnelResponse, error) {

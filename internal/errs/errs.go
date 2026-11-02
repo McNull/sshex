@@ -13,4 +13,7 @@ var (
 	// a remote sshex session, where command definitions are managed by the
 	// origin.
 	ErrCommandReadOnly = errors.New("commands cannot be edited from a remote sshex session")
+	// ErrPortListUnavailable is returned when the host has none of the tools
+	// used to list listening TCP ports.
+	ErrPortListUnavailable = errors.New("port listing is not available on this host")
 )

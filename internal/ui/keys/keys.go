@@ -161,13 +161,18 @@ func DefaultSessions() Sessions {
 
 // Tunnels contains the bindings of the Tunnels screen.
 type Tunnels struct {
-	Up        key.Binding
-	Down      key.Binding
-	Add       key.Binding
-	Remove    key.Binding
-	Refresh   key.Binding
-	Direction key.Binding
-	Submit    key.Binding
+	Up           key.Binding
+	Down         key.Binding
+	Add          key.Binding
+	Remove       key.Binding
+	Refresh      key.Binding
+	Direction    key.Binding
+	Submit       key.Binding
+	FocusPorts   key.Binding
+	FocusSpec    key.Binding
+	SelectPort   key.Binding
+	RefreshPorts key.Binding
+	Backspace    key.Binding
 }
 
 // DefaultTunnels returns the Tunnels screen bindings.
@@ -200,6 +205,26 @@ func DefaultTunnels() Tunnels {
 		Submit: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("enter", "add"),
+		),
+		FocusPorts: key.NewBinding(
+			key.WithKeys("tab", "shift+tab"),
+			key.WithHelp("tab", "ports"),
+		),
+		FocusSpec: key.NewBinding(
+			key.WithKeys("tab", "shift+tab"),
+			key.WithHelp("tab", "spec"),
+		),
+		SelectPort: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "use"),
+		),
+		RefreshPorts: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "refresh ports"),
+		),
+		Backspace: key.NewBinding(
+			key.WithKeys("backspace"),
+			key.WithHelp("⌫", "spec"),
 		),
 	}
 }

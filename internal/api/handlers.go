@@ -16,9 +16,10 @@ import (
 )
 
 type Services struct {
-	Sessions *service.SessionService
-	Tunnels  *service.TunnelService
-	Commands *service.CommandService
+	Sessions  *service.SessionService
+	Tunnels   *service.TunnelService
+	Commands  *service.CommandService
+	Listening *service.ListeningService
 }
 
 type Handlers struct {
@@ -230,6 +231,27 @@ func (h *Handlers) DeleteTunnelByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) ListPorts(w http.ResponseWriter, r *http.Request) {
+	sessionID := r.PathValue("id")
+	if !h.authorize(w, r, model.CapabilityTunnels, sessionID) {
+		return
+	}
+	host := service.PortListHost(r.URL.Query().Get("host"))
+	if host == "" {
+		host = service.PortListLocal
+	}
+	ports, err := h.services.Listening.List(r.Context(), sessionID, host)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	responses := make([]ListeningPortResponse, 0, len(ports))
+	for _, port := range ports {
+		responses = append(responses, NewListeningPortResponse(port))
+	}
+	writeJSON(w, http.StatusOK, responses)
 }
 
 func (h *Handlers) Exec(w http.ResponseWriter, r *http.Request) {
@@ -469,6 +491,10 @@ func writeError(w http.ResponseWriter, err error) {
 		status = http.StatusConflict
 	case errors.Is(err, errs.ErrDisabled):
 		status = http.StatusConflict
+	case errors.Is(err, errs.ErrNoSession):
+		status = http.StatusNotFound
+	case errors.Is(err, errs.ErrPortListUnavailable):
+		status = http.StatusServiceUnavailable
 	}
 	writeJSON(w, status, ErrorResponse{Error: err.Error()})
 }

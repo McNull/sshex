@@ -66,6 +66,43 @@ func TestClientHeartbeat(t *testing.T) {
 	}
 }
 
+func TestClientListPorts(t *testing.T) {
+	var gotPath, gotHost, gotAuth string
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /sessions/{id}/ports", func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotHost = r.URL.Query().Get("host")
+		gotAuth = r.Header.Get("Authorization")
+		_ = json.NewEncoder(w).Encode([]api.ListeningPortResponse{
+			{Port: 8080, Address: "127.0.0.1", Process: "node", PID: 321},
+		})
+	})
+	endpoint, closeFn := newUnixServer(t, mux)
+	defer closeFn()
+
+	c := NewForEndpoint(endpoint, "secret").ForSession("s1")
+	ports, err := c.ListPorts(context.Background(), "remote")
+	if err != nil {
+		t.Fatalf("ListPorts() error: %v", err)
+	}
+	if gotPath != "/sessions/s1/ports" {
+		t.Fatalf("ListPorts() path = %q", gotPath)
+	}
+	if gotHost != "remote" {
+		t.Fatalf("ListPorts() host = %q, want remote", gotHost)
+	}
+	if gotAuth != "Bearer secret" {
+		t.Fatalf("ListPorts() auth = %q, want bearer token", gotAuth)
+	}
+	if len(ports) != 1 {
+		t.Fatalf("ListPorts() = %+v, want one port", ports)
+	}
+	want := api.ListeningPortResponse{Port: 8080, Address: "127.0.0.1", Process: "node", PID: 321}
+	if ports[0] != want {
+		t.Fatalf("ports[0] = %+v, want %+v", ports[0], want)
+	}
+}
+
 func TestClientForSessionAndClose(t *testing.T) {
 	var gotPath, gotAuth string
 	mux := http.NewServeMux()

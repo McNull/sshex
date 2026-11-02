@@ -20,12 +20,22 @@ type fakeConn struct {
 	removeLocalForwards  int
 	addRemoteForwards    int
 	removeRemoteForwards int
+
+	runCalls   int
+	runCommand string
+	runOutput  string
+	runErr     error
 }
 
 func (f *fakeConn) ControlPath() string { return "" }
 func (f *fakeConn) Target() sshx.Target { return sshx.Target{} }
-func (f *fakeConn) Run(context.Context, string, io.Reader, io.Writer, io.Writer) error {
-	return nil
+func (f *fakeConn) Run(_ context.Context, command string, _ io.Reader, stdout, _ io.Writer) error {
+	f.runCalls++
+	f.runCommand = command
+	if f.runOutput != "" && stdout != nil {
+		_, _ = io.WriteString(stdout, f.runOutput)
+	}
+	return f.runErr
 }
 func (f *fakeConn) AddLocalForward(context.Context, sshx.ForwardSpec) error {
 	f.addLocalForwards++
