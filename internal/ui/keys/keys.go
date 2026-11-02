@@ -152,6 +152,51 @@ func DefaultSessions() Sessions {
 	}
 }
 
+// Tunnels contains the bindings of the Tunnels screen.
+type Tunnels struct {
+	Up        key.Binding
+	Down      key.Binding
+	Add       key.Binding
+	Remove    key.Binding
+	Refresh   key.Binding
+	Direction key.Binding
+	Submit    key.Binding
+}
+
+// DefaultTunnels returns the Tunnels screen bindings.
+func DefaultTunnels() Tunnels {
+	return Tunnels{
+		Up: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑/k", "up"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓/j", "down"),
+		),
+		Add: key.NewBinding(
+			key.WithKeys("a"),
+			key.WithHelp("a", "add tunnel"),
+		),
+		Remove: key.NewBinding(
+			key.WithKeys("x"),
+			key.WithHelp("x", "remove tunnel"),
+		),
+		Refresh: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "refresh"),
+		),
+		Direction: key.NewBinding(
+			key.WithKeys("left", "right"),
+			key.WithHelp("←/→", "direction"),
+		),
+		Submit: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "add"),
+		),
+	}
+}
+
 // Confirm and Cancel are used by confirmation prompts.
 func Confirm() key.Binding {
 	return key.NewBinding(

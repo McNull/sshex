@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mcnull/sshex/internal/ui/screen"
+	"github.com/mcnull/sshex/internal/ui/screen/placeholder"
 	"github.com/mcnull/sshex/internal/ui/theme"
 )
 
@@ -370,6 +371,11 @@ func TestMoveAndScrollTracksSelection(t *testing.T) {
 
 func TestEnterPushesSessionTunnels(t *testing.T) {
 	m := newScreen(&fakeSource{items: testSessions()}, &fakeCloser{})
+	var openedID, openedTarget string
+	m.tunnelOpener = func(sessionID, target string) screen.Screen {
+		openedID, openedTarget = sessionID, target
+		return placeholder.New("Tunnels", target, m.styles)
+	}
 	load(t, m)
 	m.Update(press(tea.KeyDown, ""))
 
@@ -378,17 +384,30 @@ func TestEnterPushesSessionTunnels(t *testing.T) {
 	if msg.Action != screen.ActionPush || msg.Screen == nil {
 		t.Fatalf("action = %+v, want push", msg)
 	}
+	if openedID != "b2" || openedTarget != "alice@ssh02" {
+		t.Fatalf("opener called with (%q, %q), want (b2, alice@ssh02)", openedID, openedTarget)
+	}
 	if msg.Screen.Title() != "Tunnels" {
 		t.Fatalf("screen title = %q, want Tunnels", msg.Screen.Title())
 	}
 
 	msg.Screen.Resize(60, 12)
 	view := ansi.Strip(msg.Screen.View())
-	if !strings.Contains(view, "alice@ssh02") || !strings.Contains(view, "b2") {
+	if !strings.Contains(view, "alice@ssh02") {
 		t.Fatalf("tunnel screen does not show the selected session:\n%s", view)
 	}
-	if !strings.Contains(view, "not implemented") {
-		t.Fatalf("tunnel placeholder text is missing:\n%s", view)
+}
+
+func TestEnterWithoutTunnelOpenerShowsStatus(t *testing.T) {
+	m := newScreen(&fakeSource{items: testSessions()}, &fakeCloser{})
+	load(t, m)
+
+	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	if cmd != nil {
+		t.Fatalf("enter without an opener returned a command (%T), want nil", cmd)
+	}
+	if !strings.Contains(ansi.Strip(m.View()), "tunnels are not available.") {
+		t.Fatalf("missing opener status is not shown:\n%s", m.View())
 	}
 }
 

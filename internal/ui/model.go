@@ -13,6 +13,7 @@ import (
 	"github.com/mcnull/sshex/internal/ui/screen/menu"
 	"github.com/mcnull/sshex/internal/ui/screen/placeholder"
 	"github.com/mcnull/sshex/internal/ui/screen/sessions"
+	tunnelscreen "github.com/mcnull/sshex/internal/ui/screen/tunnels"
 	"github.com/mcnull/sshex/internal/ui/theme"
 )
 
@@ -37,6 +38,10 @@ type ModelOptions struct {
 	// SessionCloser closes sessions from the Sessions screen. Nil uses the
 	// live broker.
 	SessionCloser sessions.Closer
+	// TunnelSource supplies the Tunnels screens. Nil uses the live broker.
+	TunnelSource tunnelscreen.Source
+	// TunnelController adds and removes tunnels. Nil uses the live broker.
+	TunnelController tunnelscreen.Controller
 }
 
 // Model is the root Bubble Tea model. It owns the chrome, the theme and the
@@ -85,6 +90,18 @@ func New(opts ModelOptions) *Model {
 		}
 	}
 
+	tunnelSource := opts.TunnelSource
+	tunnelController := opts.TunnelController
+	if tunnelSource == nil || tunnelController == nil {
+		control := tunnelControl{}
+		if tunnelSource == nil {
+			tunnelSource = control
+		}
+		if tunnelController == nil {
+			tunnelController = control
+		}
+	}
+
 	m := &Model{
 		styles:    &styles,
 		themeName: resolved.Name,
@@ -93,7 +110,7 @@ func New(opts ModelOptions) *Model {
 		header:    header.New(&styles),
 		footer:    footer.New(&styles),
 		stack: screen.NewStack(menu.New(
-			defaultMenuItems(&styles, source, runner, sessionSource, sessionCloser),
+			defaultMenuItems(&styles, source, runner, sessionSource, sessionCloser, tunnelSource, tunnelController),
 			opts.Version,
 			opts.UpdateAvailable,
 			&styles,
@@ -216,7 +233,7 @@ func (m *Model) setDarkBackground(dark bool) {
 	*m.styles = theme.NewStyles(resolved)
 }
 
-func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner connect.Runner, sessionSource sessions.Source, sessionCloser sessions.Closer) []menu.Item {
+func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner connect.Runner, sessionSource sessions.Source, sessionCloser sessions.Closer, tunnelSource tunnelscreen.Source, tunnelController tunnelscreen.Controller) []menu.Item {
 	// Keep one Connect screen for the lifetime of the UI so its query,
 	// selection and scroll position survive a trip back to the menu.
 	connectScreen := connect.New(connect.Options{
@@ -224,12 +241,37 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 		Source: source,
 		Runner: runner,
 	})
+
+	// One cached tunnel screen per session keeps its selection across a trip
+	// back to Sessions. The menu view shows every session and cannot add.
+	sessionTunnels := make(map[string]screen.Screen)
+	openSessionTunnels := func(sessionID, target string) screen.Screen {
+		if cached, ok := sessionTunnels[sessionID]; ok {
+			return cached
+		}
+		opened := tunnelscreen.New(tunnelscreen.Options{
+			Styles:     styles,
+			Source:     tunnelSource,
+			Controller: tunnelController,
+			SessionID:  sessionID,
+			Target:     target,
+		})
+		sessionTunnels[sessionID] = opened
+		return opened
+	}
+	allTunnelsScreen := tunnelscreen.New(tunnelscreen.Options{
+		Styles:     styles,
+		Source:     tunnelSource,
+		Controller: tunnelController,
+	})
+
 	// Likewise keep the Sessions screen so its selection survives a menu
 	// round-trip; it reloads its data whenever it is opened.
 	sessionsScreen := sessions.New(sessions.Options{
-		Styles: styles,
-		Source: sessionSource,
-		Closer: sessionCloser,
+		Styles:       styles,
+		Source:       sessionSource,
+		Closer:       sessionCloser,
+		TunnelOpener: openSessionTunnels,
 	})
 
 	return []menu.Item{
@@ -249,9 +291,7 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 			Kind:        "tunnels",
 			Title:       "Tunnels",
 			Description: "Manage port forwards",
-			Open: func() screen.Screen {
-				return placeholder.New("Tunnels", "Manage port forwards", styles)
-			},
+			Open:        func() screen.Screen { return allTunnelsScreen },
 		},
 		{
 			Kind:        "commands",

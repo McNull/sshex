@@ -16,7 +16,6 @@ import (
 
 	"github.com/mcnull/sshex/internal/ui/keys"
 	"github.com/mcnull/sshex/internal/ui/screen"
-	"github.com/mcnull/sshex/internal/ui/screen/tunnels"
 	"github.com/mcnull/sshex/internal/ui/theme"
 )
 
@@ -52,20 +51,26 @@ type Closer interface {
 	Close(id string) error
 }
 
+// TunnelOpener returns the tunnel screen for a session. The Sessions screen
+// never reaches the broker itself; the caller supplies the opener.
+type TunnelOpener func(sessionID, target string) screen.Screen
+
 // Options configures the Sessions screen.
 type Options struct {
-	Styles *theme.Styles
-	Source Source
-	Closer Closer
+	Styles       *theme.Styles
+	Source       Source
+	Closer       Closer
+	TunnelOpener TunnelOpener
 }
 
 // Model is the Sessions screen.
 type Model struct {
-	styles *theme.Styles
-	source Source
-	closer Closer
-	keys   keys.Sessions
-	input  textinput.Model
+	styles       *theme.Styles
+	source       Source
+	closer       Closer
+	tunnelOpener TunnelOpener
+	keys         keys.Sessions
+	input        textinput.Model
 
 	focus    int
 	sessions []Session
@@ -122,13 +127,14 @@ func New(opts Options) *Model {
 	input.Focus()
 
 	return &Model{
-		styles:  opts.Styles,
-		source:  opts.Source,
-		closer:  opts.Closer,
-		keys:    keys.DefaultSessions(),
-		input:   input,
-		focus:   focusSearch,
-		loading: true,
+		styles:       opts.Styles,
+		source:       opts.Source,
+		closer:       opts.Closer,
+		tunnelOpener: opts.TunnelOpener,
+		keys:         keys.DefaultSessions(),
+		input:        input,
+		focus:        focusSearch,
+		loading:      true,
 	}
 }
 
@@ -349,11 +355,12 @@ func (m *Model) openTunnels() (screen.Screen, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	return m, screen.Push(tunnels.New(tunnels.Options{
-		Styles:    m.styles,
-		SessionID: session.ID,
-		Target:    session.Target,
-	}))
+	if m.tunnelOpener == nil {
+		m.statusErr = true
+		m.status = "tunnels are not available."
+		return m, nil
+	}
+	return m, screen.Push(m.tunnelOpener(session.ID, session.Target))
 }
 
 func (m *Model) startClose() {

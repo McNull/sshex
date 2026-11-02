@@ -11,6 +11,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mcnull/sshex/internal/ui/screen"
+	"github.com/mcnull/sshex/internal/ui/screen/sessions"
+	"github.com/mcnull/sshex/internal/ui/screen/tunnels"
 )
 
 func newTestModel() *Model {
@@ -211,6 +213,151 @@ func TestModelShowsUpdateAvailable(t *testing.T) {
 	resize(t, m, 80, 24)
 	if !strings.Contains(m.View().Content, "(update available: v2.0.0)") {
 		t.Fatal("update indicator is missing")
+	}
+}
+
+type fakeTunnelSource struct {
+	items     []tunnels.Tunnel
+	requested []string
+}
+
+func (s *fakeTunnelSource) List(sessionID string) ([]tunnels.Tunnel, error) {
+	s.requested = append(s.requested, sessionID)
+	return s.items, nil
+}
+
+type fakeTunnelController struct{}
+
+func (fakeTunnelController) Add(string, tunnels.AddRequest) (tunnels.Tunnel, error) {
+	return tunnels.Tunnel{}, nil
+}
+
+func (fakeTunnelController) Remove(string, string) error { return nil }
+
+type fakeSessionSource struct {
+	items []sessions.Session
+}
+
+func (s *fakeSessionSource) List() ([]sessions.Session, error) { return s.items, nil }
+
+type fakeSessionCloser struct{}
+
+func (fakeSessionCloser) Close(string) error { return nil }
+
+func firstBatch(t *testing.T, cmd tea.Cmd) tea.Msg {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("expected a command, got nil")
+	}
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		return msg
+	}
+	if len(batch) == 0 {
+		t.Fatal("empty batch")
+	}
+	return batch[0]()
+}
+
+func TestModelOpensAllSessionTunnels(t *testing.T) {
+	source := &fakeTunnelSource{items: []tunnels.Tunnel{
+		{
+			ID: "t1", SessionID: "s1", Target: "bob@ssh01",
+			LocalPort: 8080, TargetHost: "db", TargetPort: 5432,
+			Direction: tunnels.DirectionLocal, State: "active",
+		},
+		{
+			ID: "t2", SessionID: "s2", Target: "alice@ssh02",
+			LocalPort: 9000, TargetHost: "cache", TargetPort: 6379,
+			Direction: tunnels.DirectionRemote, State: "active",
+		},
+	}}
+	m := New(ModelOptions{
+		Version:           "1.2.3",
+		HasDarkBackground: true,
+		NoColor:           true,
+		TunnelSource:      source,
+		TunnelController:  fakeTunnelController{},
+	})
+	resize(t, m, 80, 24)
+
+	m.Update(press(tea.KeyDown, ""))
+	m.Update(press(tea.KeyDown, ""))
+	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	action := run(t, cmd).(screen.ActionMsg)
+	_, pushCmd := m.Update(action)
+
+	if title := m.stack.Top().Title(); title != "Tunnels" {
+		t.Fatalf("screen title = %q, want Tunnels", title)
+	}
+	m.Update(firstBatch(t, pushCmd))
+
+	view := ansi.Strip(m.View().Content)
+	for _, want := range []string{
+		"localhost:8080 > db:5432", "localhost:9000 < cache:6379",
+		"bob@ssh01", "alice@ssh02",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("view is missing %q:\n%s", want, view)
+		}
+	}
+	if got := fmt.Sprint(source.requested); got != "[]" {
+		t.Fatalf("requested sessions = %v, want one all-sessions request", got)
+	}
+}
+
+func TestSessionTunnelScreenIsCached(t *testing.T) {
+	sessionSource := &fakeSessionSource{items: []sessions.Session{
+		{ID: "s1", Target: "bob@ssh01", Host: "ssh01", State: "active"},
+	}}
+	tunnelSource := &fakeTunnelSource{items: []tunnels.Tunnel{
+		{
+			ID: "t1", SessionID: "s1", Target: "bob@ssh01",
+			LocalPort: 8080, TargetHost: "db", TargetPort: 5432,
+			Direction: tunnels.DirectionLocal, State: "active",
+		},
+	}}
+	m := New(ModelOptions{
+		Version:           "1.2.3",
+		HasDarkBackground: true,
+		NoColor:           true,
+		SessionSource:     sessionSource,
+		SessionCloser:     fakeSessionCloser{},
+		TunnelSource:      tunnelSource,
+		TunnelController:  fakeTunnelController{},
+	})
+	resize(t, m, 80, 24)
+
+	// Open Sessions and load its row.
+	m.Update(press(tea.KeyDown, ""))
+	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	m.Update(run(t, cmd).(screen.ActionMsg))
+	m.Update(firstBatch(t, m.stack.Top().Init()))
+
+	// Open the session's tunnel screen.
+	_, cmd = m.Update(press(tea.KeyEnter, ""))
+	_, pushCmd := m.Update(run(t, cmd).(screen.ActionMsg))
+	first := m.stack.Top()
+	m.Update(firstBatch(t, pushCmd))
+	if first.Title() != "Tunnels" {
+		t.Fatalf("screen title = %q, want Tunnels", first.Title())
+	}
+	if !strings.Contains(ansi.Strip(first.View()), "localhost:8080 > db:5432") {
+		t.Fatalf("tunnel screen did not load its session:\n%s", first.View())
+	}
+
+	// Back to Sessions, then open the same session again.
+	_, cmd = m.Update(press(tea.KeyEsc, ""))
+	m.Update(run(t, cmd).(screen.ActionMsg))
+	_, cmd = m.Update(press(tea.KeyEnter, ""))
+	m.Update(run(t, cmd).(screen.ActionMsg))
+
+	if m.stack.Top() != first {
+		t.Fatal("session tunnel screen was recreated instead of restored")
+	}
+	if got := fmt.Sprint(tunnelSource.requested); got != "[s1]" {
+		t.Fatalf("requested sessions = %v, want [s1]", got)
 	}
 }
 
