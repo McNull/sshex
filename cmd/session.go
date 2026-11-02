@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -44,7 +45,7 @@ var sessionListCmd = &cobra.Command{
 		for i, s := range sessions {
 			hops[i] = sessionHopsLabel(cmd.Context(), s)
 		}
-		renderSessions(cmd.OutOrStdout(), sessions, c.SessionID(), hops)
+		renderSessions(cmd.OutOrStdout(), sessions, currentSessionID(), hops)
 		return nil
 	},
 }
@@ -97,6 +98,13 @@ func renderSessions(out io.Writer, sessions []api.SessionResponse, current strin
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\t%s\n", id, target, s.Origin, s.State, s.Connections, hop, stale)
 	}
+}
+
+// currentSessionID reports the remote session context, if this command is
+// running in a remote shell. A control client may use any active session to
+// reach the broker, which does not make that session the current one.
+func currentSessionID() string {
+	return os.Getenv("SSHEX_SESSION")
 }
 
 // resolveProxy probes ssh configuration for a session's effective proxy path.

@@ -97,6 +97,19 @@ func TestRenderSessions(t *testing.T) {
 	}
 }
 
+func TestCurrentSessionIDUsesRemoteContext(t *testing.T) {
+	t.Setenv("SSHEX_SESSION", "")
+
+	if got := currentSessionID(); got != "" {
+		t.Fatalf("currentSessionID() on origin = %q, want empty", got)
+	}
+
+	t.Setenv("SSHEX_SESSION", "s1")
+	if got := currentSessionID(); got != "s1" {
+		t.Fatalf("currentSessionID() in remote session = %q, want s1", got)
+	}
+}
+
 func TestHopCount(t *testing.T) {
 	tests := []struct {
 		in   string

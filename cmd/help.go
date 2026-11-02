@@ -173,7 +173,8 @@ const sessionListHelp = `  List active sshex sessions.
   Options:
     -h, --help            Show this help message and exit
 
-  The session running this command is marked with *.
+  In a remote shell, its session is marked with *. On the origin, no session
+  is marked.
 `
 
 const sessionCloseHelp = `  Close a session and drop its tunnels.
