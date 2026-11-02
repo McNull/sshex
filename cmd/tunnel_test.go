@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -58,6 +59,23 @@ func TestRenderTunnelList(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("renderTunnelList() output missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestListAllTunnelsWithoutActiveSessions(t *testing.T) {
+	t.Setenv("SSHEX_RUNTIME_DIR", t.TempDir())
+	t.Setenv("SSHEX_HOME", t.TempDir())
+	t.Setenv("SSHEX_SESSION", "")
+
+	var out bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	cmd.SetOut(&out)
+	if err := listAllTunnels(cmd); err != nil {
+		t.Fatalf("listAllTunnels() error: %v", err)
+	}
+	if got, want := out.String(), "No active sessions.\n"; got != want {
+		t.Fatalf("listAllTunnels() output = %q, want %q", got, want)
 	}
 }
 

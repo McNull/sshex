@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/mcnull/sshex/internal/api"
+	"github.com/mcnull/sshex/internal/sessionfile"
 	"github.com/mcnull/sshex/internal/sshx"
 	"github.com/mcnull/sshex/internal/sshx/openssh"
 	"github.com/spf13/cobra"
@@ -31,6 +33,10 @@ var sessionListCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		c, err := controlClient()
 		if err != nil {
+			if errors.Is(err, sessionfile.ErrNone) && currentSessionID() == "" {
+				fmt.Fprintln(cmd.OutOrStdout(), "No active sessions.")
+				return nil
+			}
 			return err
 		}
 		sessions, err := c.ListSessions(cmd.Context())
@@ -38,7 +44,7 @@ var sessionListCmd = &cobra.Command{
 			return err
 		}
 		if len(sessions) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "no active sessions.")
+			fmt.Fprintln(cmd.OutOrStdout(), "No active sessions.")
 			return nil
 		}
 		hops := make([]string, len(sessions))

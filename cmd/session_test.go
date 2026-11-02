@@ -13,6 +13,7 @@ import (
 	"github.com/mcnull/sshex/internal/sessionfile"
 	"github.com/mcnull/sshex/internal/sshx"
 	"github.com/mcnull/sshex/internal/sshx/openssh"
+	"github.com/spf13/cobra"
 )
 
 func liveSession(t *testing.T, runtimeDir, id, target string) {
@@ -83,6 +84,22 @@ func TestSelectClientResolution(t *testing.T) {
 	}
 	if c.SessionID() != "s2" {
 		t.Fatalf("selectTunnelClient(s2) id = %q, want s2", c.SessionID())
+	}
+}
+
+func TestSessionListWithoutActiveSessions(t *testing.T) {
+	t.Setenv("SSHEX_RUNTIME_DIR", t.TempDir())
+	t.Setenv("SSHEX_HOME", t.TempDir())
+	t.Setenv("SSHEX_SESSION", "")
+
+	var out bytes.Buffer
+	cmd := &cobra.Command{Use: "list"}
+	cmd.SetOut(&out)
+	if err := sessionListCmd.RunE(cmd, nil); err != nil {
+		t.Fatalf("session list error: %v", err)
+	}
+	if got, want := out.String(), "No active sessions.\n"; got != want {
+		t.Fatalf("session list output = %q, want %q", got, want)
 	}
 }
 

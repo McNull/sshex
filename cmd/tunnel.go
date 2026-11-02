@@ -234,6 +234,10 @@ func sessionTarget(cmd *cobra.Command, c *client.Client, sessionID string) strin
 func listAllTunnels(cmd *cobra.Command) error {
 	c, err := controlClient()
 	if err != nil {
+		if errors.Is(err, sessionfile.ErrNone) && currentSessionID() == "" {
+			fmt.Fprintln(cmd.OutOrStdout(), "No active sessions.")
+			return nil
+		}
 		return err
 	}
 	sessions, err := c.ListSessions(cmd.Context())

@@ -107,8 +107,8 @@ func TestConnectAndTunnel(t *testing.T) {
 	}
 
 	listOut, err := runSSHEX(t, binary, runtimeDir, "tunnel", "list")
-	if err == nil || !strings.Contains(listOut, "no active sshex session") {
-		t.Fatalf("expected no active session after exit, got err=%v out=%q", err, listOut)
+	if err != nil || !strings.Contains(listOut, "No active sessions.") {
+		t.Fatalf("expected successful empty session list after exit, got err=%v out=%q", err, listOut)
 	}
 
 	if _, err := exec.LookPath("ssh"); err == nil {
@@ -299,8 +299,8 @@ func TestMultipleSessionsSharing(t *testing.T) {
 	// Closing the last shell tears everything down.
 	b.stop(t)
 	waitForSessionCount(t, runtimeDir, 0)
-	if out, err := runSSHEX(t, binary, runtimeDir, "tunnel", "list"); err == nil || !strings.Contains(out, "no active sshex session") {
-		t.Fatalf("expected no active session after last exit: err=%v out=%q", err, out)
+	if out, err := runSSHEX(t, binary, runtimeDir, "tunnel", "list"); err != nil || !strings.Contains(out, "No active sessions.") {
+		t.Fatalf("expected successful empty session list after last exit: err=%v out=%q", err, out)
 	}
 }
 
