@@ -62,6 +62,16 @@ func press(code rune, text string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: code, Text: text}
 }
 
+func typeText(m *Model, text string) {
+	for _, r := range text {
+		m.Update(press(r, string(r)))
+	}
+}
+
+func focusSessionList(m *Model) {
+	m.Update(press(tea.KeyTab, ""))
+}
+
 func action(t *testing.T, cmd tea.Cmd) screen.ActionMsg {
 	t.Helper()
 	if cmd == nil {
@@ -213,6 +223,112 @@ func TestFallbackSelectionUsesCurrentSession(t *testing.T) {
 	}
 }
 
+func TestSearchFiltersOnHostname(t *testing.T) {
+	m := newScreen(&fakeSource{items: testSessions()}, &fakeCloser{})
+	load(t, m)
+
+	typeText(m, "SSH02")
+	if len(m.filtered) != 1 || m.filtered[0].ID != "b2" {
+		t.Fatalf("filtered = %+v, want only b2", m.filtered)
+	}
+	view := ansi.Strip(m.View())
+	if strings.Contains(view, "bob@ssh01") || !strings.Contains(view, "alice@ssh02") {
+		t.Fatalf("filtered view is wrong:\n%s", view)
+	}
+	if !strings.Contains(view, "1 of 2 sessions") {
+		t.Fatalf("filtered count is missing:\n%s", view)
+	}
+
+	for range len("SSH02") {
+		m.Update(press(tea.KeyBackspace, ""))
+	}
+	typeText(m, "zzz")
+	if !strings.Contains(ansi.Strip(m.View()), "no matching sessions") {
+		t.Fatalf("empty filter state is missing:\n%s", m.View())
+	}
+}
+
+func TestSearchTypingDoesNotTriggerActions(t *testing.T) {
+	closer := &fakeCloser{}
+	m := newScreen(&fakeSource{items: testSessions()}, closer)
+	load(t, m)
+
+	typeText(m, "x")
+	if m.confirming || len(closer.ids) != 0 {
+		t.Fatal("typing x in the search field closed a session")
+	}
+	if got := m.input.Value(); got != "x" {
+		t.Fatalf("search value = %q, want x", got)
+	}
+}
+
+func TestTabFocusEnablesCloseAndBackspace(t *testing.T) {
+	closer := &fakeCloser{}
+	m := newScreen(&fakeSource{items: testSessions()}, closer)
+	load(t, m)
+
+	focusSessionList(m)
+	if m.focus != focusList || m.input.Focused() {
+		t.Fatal("tab did not focus the session list")
+	}
+	m.Update(press('x', "x"))
+	if !m.confirming {
+		t.Fatal("x did not start a confirmation in list focus")
+	}
+	m.Update(press(tea.KeyEsc, ""))
+
+	m.Update(press(tea.KeyBackspace, ""))
+	if m.focus != focusSearch || !m.input.Focused() {
+		t.Fatal("backspace did not return focus to the search field")
+	}
+}
+
+func TestSearchQuerySurvivesRefresh(t *testing.T) {
+	source := &fakeSource{items: testSessions()}
+	m := newScreen(source, &fakeCloser{})
+	load(t, m)
+	typeText(m, "ssh02")
+
+	load(t, m)
+
+	if got := m.input.Value(); got != "ssh02" {
+		t.Fatalf("search value = %q, want ssh02", got)
+	}
+	if len(m.filtered) != 1 || m.filtered[0].ID != "b2" {
+		t.Fatalf("filtered = %+v, want only b2", m.filtered)
+	}
+}
+
+func TestJKAreTypedInSearch(t *testing.T) {
+	m := newScreen(&fakeSource{items: testSessions()}, &fakeCloser{})
+	load(t, m)
+
+	typeText(m, "jk")
+	if got := m.input.Value(); got != "jk" {
+		t.Fatalf("search value = %q, want jk", got)
+	}
+	if m.selected != 0 {
+		t.Fatalf("selected = %d, want 0", m.selected)
+	}
+}
+
+func TestArrowKeysMoveSelectionWhileTyping(t *testing.T) {
+	m := newScreen(&fakeSource{items: testSessions()}, &fakeCloser{})
+	load(t, m)
+	typeText(m, "ssh")
+
+	m.Update(press(tea.KeyDown, ""))
+	if m.selected != 1 {
+		t.Fatalf("selected = %d, want 1", m.selected)
+	}
+	if m.focus != focusSearch {
+		t.Fatal("arrow keys should not change focus")
+	}
+	if got := m.input.Value(); got != "ssh" {
+		t.Fatalf("search value = %q, want ssh", got)
+	}
+}
+
 func TestLoadErrorIsShown(t *testing.T) {
 	m := newScreen(&fakeSource{err: errors.New("boom")}, &fakeCloser{})
 	load(t, m)
@@ -238,11 +354,11 @@ func TestMoveAndScrollTracksSelection(t *testing.T) {
 	if m.selected != 4 {
 		t.Fatalf("selected = %d, want 4", m.selected)
 	}
-	if m.offset != 2 {
-		t.Fatalf("offset = %d, want 2", m.offset)
+	if m.offset != 3 {
+		t.Fatalf("offset = %d, want 3", m.offset)
 	}
 	view := ansi.Strip(m.View())
-	if strings.Contains(view, "h00") || !strings.Contains(view, "h02") || !strings.Contains(view, "h04") {
+	if strings.Contains(view, "h00") || !strings.Contains(view, "h03") || !strings.Contains(view, "h04") {
 		t.Fatalf("view does not show the scrolled window:\n%s", view)
 	}
 
@@ -280,6 +396,7 @@ func TestCloseRequiresConfirmation(t *testing.T) {
 	closer := &fakeCloser{}
 	m := newScreen(&fakeSource{items: testSessions()}, closer)
 	load(t, m)
+	focusSessionList(m)
 
 	m.Update(press('x', "x"))
 	if !m.confirming {
@@ -317,6 +434,7 @@ func TestCancelCloseKeepsSession(t *testing.T) {
 	closer := &fakeCloser{}
 	m := newScreen(&fakeSource{items: testSessions()}, closer)
 	load(t, m)
+	focusSessionList(m)
 
 	m.Update(press('x', "x"))
 	m.Update(press(tea.KeyEsc, ""))
@@ -333,6 +451,7 @@ func TestCloseErrorIsShown(t *testing.T) {
 	closer := &fakeCloser{err: errors.New("boom")}
 	m := newScreen(&fakeSource{items: testSessions()}, closer)
 	load(t, m)
+	focusSessionList(m)
 
 	m.Update(press('x', "x"))
 	_, cmd := m.Update(press(tea.KeyEnter, ""))

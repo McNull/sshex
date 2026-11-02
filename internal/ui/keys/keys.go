@@ -92,11 +92,16 @@ func DefaultConnect() Connect {
 
 // Sessions contains the bindings of the Sessions screen.
 type Sessions struct {
-	Up      key.Binding
-	Down    key.Binding
-	Open    key.Binding
-	Close   key.Binding
-	Refresh key.Binding
+	Up          key.Binding
+	Down        key.Binding
+	SearchUp    key.Binding
+	SearchDown  key.Binding
+	Open        key.Binding
+	Close       key.Binding
+	Refresh     key.Binding
+	FocusList   key.Binding
+	FocusSearch key.Binding
+	Backspace   key.Binding
 }
 
 // DefaultSessions returns the Sessions screen bindings.
@@ -110,6 +115,16 @@ func DefaultSessions() Sessions {
 			key.WithKeys("down", "j"),
 			key.WithHelp("↓/j", "down"),
 		),
+		// The search field needs j and k as text, so it only treats the arrow
+		// keys as movement.
+		SearchUp: key.NewBinding(
+			key.WithKeys("up"),
+			key.WithHelp("↑", "up"),
+		),
+		SearchDown: key.NewBinding(
+			key.WithKeys("down"),
+			key.WithHelp("↓", "down"),
+		),
 		Open: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("enter", "tunnels"),
@@ -121,6 +136,18 @@ func DefaultSessions() Sessions {
 		Refresh: key.NewBinding(
 			key.WithKeys("r"),
 			key.WithHelp("r", "refresh"),
+		),
+		FocusList: key.NewBinding(
+			key.WithKeys("tab", "shift+tab"),
+			key.WithHelp("tab", "sessions"),
+		),
+		FocusSearch: key.NewBinding(
+			key.WithKeys("tab", "shift+tab"),
+			key.WithHelp("tab", "search"),
+		),
+		Backspace: key.NewBinding(
+			key.WithKeys("backspace"),
+			key.WithHelp("⌫", "edit"),
 		),
 	}
 }
