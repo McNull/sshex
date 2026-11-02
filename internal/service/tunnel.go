@@ -134,20 +134,35 @@ func (s *TunnelService) Remove(ctx context.Context, sessionID string, localPort 
 		if direction != "" && tunnel.Direction != direction {
 			continue
 		}
-		if conn, ok := s.pool.Controller(sessionID); ok {
-			spec := sshx.ForwardSpec{
-				BindAddress: "127.0.0.1",
-				LocalPort:   tunnel.LocalPort,
-				TargetHost:  tunnel.TargetHost,
-				TargetPort:  tunnel.TargetPort,
-			}
-			if err := removeForward(ctx, conn, tunnel.Direction, spec); err != nil {
-				return err
-			}
-		}
-		return s.tunnels.Delete(ctx, tunnel.ID)
+		return s.remove(ctx, tunnel)
 	}
 	return repository.ErrNotFound
+}
+
+func (s *TunnelService) RemoveByID(ctx context.Context, sessionID, tunnelID string) error {
+	tunnel, err := s.tunnels.Get(ctx, tunnelID)
+	if err != nil {
+		return err
+	}
+	if tunnel.SessionID != sessionID {
+		return repository.ErrNotFound
+	}
+	return s.remove(ctx, tunnel)
+}
+
+func (s *TunnelService) remove(ctx context.Context, tunnel model.Tunnel) error {
+	if conn, ok := s.pool.Controller(tunnel.SessionID); ok {
+		spec := sshx.ForwardSpec{
+			BindAddress: "127.0.0.1",
+			LocalPort:   tunnel.LocalPort,
+			TargetHost:  tunnel.TargetHost,
+			TargetPort:  tunnel.TargetPort,
+		}
+		if err := removeForward(ctx, conn, tunnel.Direction, spec); err != nil {
+			return err
+		}
+	}
+	return s.tunnels.Delete(ctx, tunnel.ID)
 }
 
 func addForward(ctx context.Context, conn sshx.Connection, direction model.ForwardDirection, spec sshx.ForwardSpec) error {

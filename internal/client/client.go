@@ -127,6 +127,11 @@ func (c *Client) RemoveTunnel(ctx context.Context, localPort int, direction mode
 	return c.request(ctx, http.MethodDelete, path, nil, nil)
 }
 
+func (c *Client) RemoveTunnelByID(ctx context.Context, tunnelID string) error {
+	path := "/sessions/" + c.sessionID + "/tunnels/by-id/" + tunnelID
+	return c.request(ctx, http.MethodDelete, path, nil, nil)
+}
+
 // Exec runs a predefined command on the origin and streams its output to the
 // given writers. The rendered command line is written to notice. It returns the
 // command's exit code.

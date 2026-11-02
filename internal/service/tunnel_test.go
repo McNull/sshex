@@ -139,6 +139,40 @@ func TestTunnelServiceRemoveRemote(t *testing.T) {
 	}
 }
 
+func TestTunnelServiceRemoveByID(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestServices()
+	conn := seedActiveSession(t, svc, "s1")
+	if err := svc.tunnelRepo.Create(ctx, model.Tunnel{
+		ID: "t1", SessionID: "s1", LocalPort: 8080, TargetHost: "localhost", TargetPort: 80, Direction: model.ForwardLocal,
+	}); err != nil {
+		t.Fatalf("seed tunnel: %v", err)
+	}
+
+	if err := svc.tunnels.RemoveByID(ctx, "s1", "t1"); err != nil {
+		t.Fatalf("RemoveByID() error = %v", err)
+	}
+	if conn.removeLocalForwards != 1 {
+		t.Fatalf("RemoveByID() removed %d local forwards, want 1", conn.removeLocalForwards)
+	}
+	if _, err := svc.tunnelRepo.Get(ctx, "t1"); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatalf("tunnel after RemoveByID() error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestTunnelServiceRemoveByIDRequiresMatchingSession(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestServices()
+	seedActiveSession(t, svc, "s1")
+	if err := svc.tunnelRepo.Create(ctx, model.Tunnel{ID: "t1", SessionID: "s1", LocalPort: 8080}); err != nil {
+		t.Fatalf("seed tunnel: %v", err)
+	}
+
+	if err := svc.tunnels.RemoveByID(ctx, "s2", "t1"); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatalf("RemoveByID() error = %v, want ErrNotFound", err)
+	}
+}
+
 func TestTunnelServiceRemoveDirectionFilter(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestServices()

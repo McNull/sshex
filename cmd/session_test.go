@@ -67,12 +67,22 @@ func TestSelectClientResolution(t *testing.T) {
 	if _, err := selectClient(""); err == nil {
 		t.Fatal("selectClient(\"\") with two sessions error = nil, want ambiguity error")
 	}
+	if _, err := selectTunnelClient(""); err == nil || !strings.Contains(err.Error(), "specify --session <id>") {
+		t.Fatalf("selectTunnelClient(\"\") error = %v, want explicit session guidance", err)
+	}
 	c, err = selectClient("s2")
 	if err != nil {
 		t.Fatalf("selectClient(s2) error: %v", err)
 	}
 	if c.SessionID() != "s2" {
 		t.Fatalf("selectClient(s2) id = %q, want s2", c.SessionID())
+	}
+	c, err = selectTunnelClient("s2")
+	if err != nil {
+		t.Fatalf("selectTunnelClient(s2) error: %v", err)
+	}
+	if c.SessionID() != "s2" {
+		t.Fatalf("selectTunnelClient(s2) id = %q, want s2", c.SessionID())
 	}
 }
 

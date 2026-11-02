@@ -220,6 +220,18 @@ func (h *Handlers) DeleteTunnel(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *Handlers) DeleteTunnelByID(w http.ResponseWriter, r *http.Request) {
+	sessionID := r.PathValue("id")
+	if !h.authorize(w, r, model.CapabilityTunnels, sessionID) {
+		return
+	}
+	if err := h.services.Tunnels.RemoveByID(r.Context(), sessionID, r.PathValue("tunnelID")); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handlers) Exec(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.PathValue("id")
 	if !h.authorize(w, r, model.CapabilityExec, sessionID) {

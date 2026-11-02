@@ -101,6 +101,26 @@ func TestClientForSessionAndClose(t *testing.T) {
 	}
 }
 
+func TestClientRemoveTunnelByID(t *testing.T) {
+	var gotPath, gotMethod string
+	mux := http.NewServeMux()
+	mux.HandleFunc("DELETE /sessions/{id}/tunnels/by-id/{tunnelID}", func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotMethod = r.Method
+		w.WriteHeader(http.StatusNoContent)
+	})
+	endpoint, closeFn := newUnixServer(t, mux)
+	defer closeFn()
+
+	c := NewForEndpoint(endpoint, "tok").ForSession("s1")
+	if err := c.RemoveTunnelByID(context.Background(), "tunnel-1"); err != nil {
+		t.Fatalf("RemoveTunnelByID() error: %v", err)
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/sessions/s1/tunnels/by-id/tunnel-1" {
+		t.Fatalf("RemoveTunnelByID() request = %s %s", gotMethod, gotPath)
+	}
+}
+
 func TestClientExec(t *testing.T) {
 	var gotPath string
 	var gotRequest api.ExecRequest

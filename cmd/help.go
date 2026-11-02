@@ -106,7 +106,7 @@ const tunnelAddHelp = `  Add a new ssh tunnel.
                           <port> and forwards to <target>:<remote-port> on the
                           local machine.
     -s, --session <id>    Target a specific session id instead of this shell's
-                          session.
+                          session (required when multiple sessions are active).
     -h, --help            Show this help message and exit
 
   Examples:
@@ -127,6 +127,7 @@ const tunnelRmHelp = `  Remove an existing ssh tunnel.
 
   Usage:
     sshex tunnel rm [-L|-R] <port>
+    sshex tunnel rm --id <tunnel-id>
 
   Arguments:
     <port>                The port of the tunnel to remove
@@ -134,8 +135,9 @@ const tunnelRmHelp = `  Remove an existing ssh tunnel.
   Options:
     -L, --local           Remove a local forward
     -R, --remote          Remove a remote forward
+        --id <id>         Remove a tunnel by its id instead of port.
     -s, --session <id>    Target a specific session id instead of this shell's
-                          session.
+                          session (required when multiple sessions are active).
     -h, --help            Show this help message and exit
 `
 
@@ -147,7 +149,8 @@ const tunnelListHelp = `  List all active ssh tunnels.
   Options:
     -s, --session <id>    List tunnels for a specific session id instead of this
                           shell's session.
-        --all             List tunnels across all sessions of this machine.
+        --all             List tunnels across all sessions (the default on the
+                          origin; remote shells default to their own session).
     -h, --help            Show this help message and exit
 `
 

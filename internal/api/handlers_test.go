@@ -165,6 +165,13 @@ func TestDeleteTunnelInvalidPort(t *testing.T) {
 	}
 }
 
+func TestDeleteTunnelByIDMissing(t *testing.T) {
+	rec := do(t, newTestRouter(), http.MethodDelete, "/sessions/s1/tunnels/by-id/t1", "", true)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
 func TestDeleteSessionMissing(t *testing.T) {
 	rec := do(t, newTestRouter(), http.MethodDelete, "/sessions/s1", "", true)
 	if rec.Code != http.StatusNotFound {

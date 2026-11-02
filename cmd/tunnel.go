@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
+	"text/tabwriter"
 
+	"github.com/mcnull/sshex/internal/api"
 	"github.com/mcnull/sshex/internal/client"
 	"github.com/mcnull/sshex/internal/model"
 	"github.com/mcnull/sshex/internal/service"
@@ -36,7 +39,7 @@ var tunnelAddCmd = &cobra.Command{
 			return err
 		}
 		sessionID, _ := cmd.Flags().GetString("session")
-		c, err := selectClient(sessionID)
+		c, err := selectTunnelClient(sessionID)
 		if err != nil {
 			return err
 		}
@@ -51,24 +54,48 @@ var tunnelAddCmd = &cobra.Command{
 }
 
 var tunnelRmCmd = &cobra.Command{
-	Use:   "rm [-L|-R] <port>",
+	Use:   "rm [-L|-R] <port> | --id <tunnel-id>",
 	Short: "Remove an existing ssh tunnel",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		port, err := strconv.Atoi(args[0])
-		if err != nil {
-			return fmt.Errorf("invalid port: %q", args[0])
+	Args: func(cmd *cobra.Command, args []string) error {
+		idSet := cmd.Flags().Changed("id")
+		if idSet {
+			id, _ := cmd.Flags().GetString("id")
+			if id == "" {
+				return fmt.Errorf("tunnel id must not be empty")
+			}
+			if len(args) != 0 {
+				return fmt.Errorf("tunnel port cannot be combined with --id")
+			}
+			return nil
 		}
+		return cobra.ExactArgs(1)(cmd, args)
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
 		direction, err := tunnelDirection(cmd, "")
 		if err != nil {
 			return err
 		}
 		sessionID, _ := cmd.Flags().GetString("session")
-		c, err := selectClient(sessionID)
+		c, err := selectTunnelClient(sessionID)
 		if err != nil {
 			return err
 		}
-		if err := c.RemoveTunnel(cmd.Context(), port, direction); err != nil {
+		idSet := cmd.Flags().Changed("id")
+		id, _ := cmd.Flags().GetString("id")
+		if idSet {
+			if direction != "" {
+				return fmt.Errorf("cannot combine --id with -L or -R")
+			}
+			err = c.RemoveTunnelByID(cmd.Context(), id)
+		} else {
+			var port int
+			port, err = strconv.Atoi(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid port: %q", args[0])
+			}
+			err = c.RemoveTunnel(cmd.Context(), port, direction)
+		}
+		if err != nil {
 			return err
 		}
 		fmt.Fprintln(cmd.OutOrStdout(), "tunnel removed")
@@ -82,10 +109,10 @@ var tunnelListCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		all, _ := cmd.Flags().GetBool("all")
-		if all {
+		sessionID, _ := cmd.Flags().GetString("session")
+		if shouldListAllTunnels(all, sessionID, currentSessionID()) {
 			return listAllTunnels(cmd)
 		}
-		sessionID, _ := cmd.Flags().GetString("session")
 		c, err := selectClient(sessionID)
 		if err != nil {
 			return err
@@ -99,11 +126,22 @@ var tunnelListCmd = &cobra.Command{
 			return nil
 		}
 		target := sessionTarget(cmd, c, sessionID)
+		rows := make([]tunnelListRow, 0, len(tunnels))
 		for _, tunnel := range tunnels {
-			fmt.Fprintln(cmd.OutOrStdout(), formatTunnel(tunnel.Direction, tunnel.LocalPort, tunnel.TargetHost, tunnel.TargetPort, target))
+			rows = append(rows, tunnelListRow{
+				id:        tunnel.ID,
+				sessionID: c.SessionID(),
+				target:    target,
+				tunnel:    formatTunnel(tunnel.Direction, tunnel.LocalPort, tunnel.TargetHost, tunnel.TargetPort, ""),
+			})
 		}
+		renderTunnelList(cmd.OutOrStdout(), rows)
 		return nil
 	},
+}
+
+func shouldListAllTunnels(all bool, sessionID, remoteSessionID string) bool {
+	return all || (sessionID == "" && remoteSessionID == "")
 }
 
 var tunnelHelpCmd = &cobra.Command{
@@ -168,6 +206,16 @@ func selectClient(sessionID string) (*client.Client, error) {
 	return c.ForSession(sessionID), nil
 }
 
+// selectTunnelClient resolves the session for tunnel mutations and turns an
+// ambiguous origin selection into guidance to choose a session explicitly.
+func selectTunnelClient(sessionID string) (*client.Client, error) {
+	c, err := selectClient(sessionID)
+	if errors.Is(err, sessionfile.ErrAmbiguous) && sessionID == "" && currentSessionID() == "" {
+		return nil, fmt.Errorf("multiple active sshex sessions; specify --session <id> (see `sshex session list`)")
+	}
+	return c, err
+}
+
 // sessionTarget returns the display target for the selected session.
 func sessionTarget(cmd *cobra.Command, c *client.Client, sessionID string) string {
 	if sessionID == "" {
@@ -193,7 +241,7 @@ func listAllTunnels(cmd *cobra.Command) error {
 		return err
 	}
 	out := cmd.OutOrStdout()
-	total := 0
+	rows := make([]tunnelListRow, 0)
 	for _, session := range sessions {
 		tunnels, err := c.ForSession(session.ID).ListTunnels(cmd.Context())
 		if err != nil {
@@ -206,16 +254,37 @@ func listAllTunnels(cmd *cobra.Command) error {
 		if session.User != "" {
 			target = session.User + "@" + target
 		}
-		fmt.Fprintf(out, "%s  %s\n", session.ID, target)
 		for _, tunnel := range tunnels {
-			fmt.Fprintf(out, "  %s\n", formatTunnel(tunnel.Direction, tunnel.LocalPort, tunnel.TargetHost, tunnel.TargetPort, ""))
+			rows = append(rows, tunnelListRow{
+				id:        tunnel.ID,
+				sessionID: session.ID,
+				target:    target,
+				tunnel:    formatTunnel(tunnel.Direction, tunnel.LocalPort, tunnel.TargetHost, tunnel.TargetPort, ""),
+			})
 		}
-		total += len(tunnels)
 	}
-	if total == 0 {
+	if len(rows) == 0 {
 		fmt.Fprintln(out, "no active tunnels.")
+		return nil
 	}
+	renderTunnelList(out, rows)
 	return nil
+}
+
+type tunnelListRow struct {
+	id        string
+	sessionID string
+	target    string
+	tunnel    string
+}
+
+func renderTunnelList(out io.Writer, rows []tunnelListRow) {
+	w := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
+	defer w.Flush()
+	fmt.Fprintln(w, "ID\tSESSION\tTARGET\tTUNNEL")
+	for _, row := range rows {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", row.id, row.sessionID, row.target, row.tunnel)
+	}
 }
 
 func formatTunnel(direction model.ForwardDirection, localPort int, targetHost string, targetPort int, target string) string {
@@ -253,6 +322,70 @@ func completeSessionIDs(_ *cobra.Command, _ []string, _ string) ([]cobra.Complet
 	return comps, cobra.ShellCompDirectiveNoFileComp
 }
 
+func completeTunnelIDs(cmd *cobra.Command, _ []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	sessionID, _ := cmd.Flags().GetString("session")
+	if shouldListAllTunnels(false, sessionID, currentSessionID()) {
+		c, err := controlClient()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		sessions, err := c.ListSessions(context.Background())
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		var tunnels []api.TunnelResponse
+		for _, session := range sessions {
+			items, err := c.ForSession(session.ID).ListTunnels(context.Background())
+			if err != nil {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			tunnels = append(tunnels, items...)
+		}
+		return tunnelIDCompletions(tunnels, sessions), cobra.ShellCompDirectiveNoFileComp
+	}
+
+	c, err := selectClient(sessionID)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	tunnels, err := c.ListTunnels(context.Background())
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	session, err := c.GetSession(context.Background())
+	if err != nil {
+		return tunnelIDCompletions(tunnels, nil), cobra.ShellCompDirectiveNoFileComp
+	}
+	return tunnelIDCompletions(tunnels, []api.SessionResponse{session}), cobra.ShellCompDirectiveNoFileComp
+}
+
+func tunnelIDCompletions(tunnels []api.TunnelResponse, sessions []api.SessionResponse) []cobra.Completion {
+	sessionByID := make(map[string]api.SessionResponse, len(sessions))
+	for _, session := range sessions {
+		sessionByID[session.ID] = session
+	}
+	completions := make([]cobra.Completion, 0, len(tunnels))
+	for _, tunnel := range tunnels {
+		desc := fmt.Sprintf("%s localhost:%d %s %s:%d", tunnel.SessionID, tunnel.LocalPort, tunnelArrow(tunnel.Direction), tunnel.TargetHost, tunnel.TargetPort)
+		if session, ok := sessionByID[tunnel.SessionID]; ok {
+			target := session.Host
+			if session.User != "" {
+				target = session.User + "@" + target
+			}
+			desc = fmt.Sprintf("%s (%s) localhost:%d %s %s:%d", tunnel.SessionID, target, tunnel.LocalPort, tunnelArrow(tunnel.Direction), tunnel.TargetHost, tunnel.TargetPort)
+		}
+		completions = append(completions, cobra.CompletionWithDesc(tunnel.ID, desc))
+	}
+	return completions
+}
+
+func tunnelArrow(direction model.ForwardDirection) string {
+	if direction == model.ForwardRemote {
+		return "<"
+	}
+	return ">"
+}
+
 func tunnelDirection(cmd *cobra.Command, fallback model.ForwardDirection) (model.ForwardDirection, error) {
 	local, _ := cmd.Flags().GetBool("local")
 	remote, _ := cmd.Flags().GetBool("remote")
@@ -271,16 +404,18 @@ func tunnelDirection(cmd *cobra.Command, fallback model.ForwardDirection) (model
 func init() {
 	tunnelAddCmd.Flags().BoolP("local", "L", false, "Create a local forward (default)")
 	tunnelAddCmd.Flags().BoolP("remote", "R", false, "Create a remote forward")
-	tunnelAddCmd.Flags().StringP("session", "s", "", "Target a specific session id")
+	tunnelAddCmd.Flags().StringP("session", "s", "", "Target a specific session id (required when multiple sessions are active)")
 	tunnelRmCmd.Flags().BoolP("local", "L", false, "Remove a local forward")
 	tunnelRmCmd.Flags().BoolP("remote", "R", false, "Remove a remote forward")
-	tunnelRmCmd.Flags().StringP("session", "s", "", "Target a specific session id")
+	tunnelRmCmd.Flags().String("id", "", "Remove a tunnel by its id instead of port")
+	tunnelRmCmd.Flags().StringP("session", "s", "", "Target a specific session id (required when multiple sessions are active)")
 	tunnelListCmd.Flags().StringP("session", "s", "", "Target a specific session id")
-	tunnelListCmd.Flags().Bool("all", false, "List tunnels across all sessions")
+	tunnelListCmd.Flags().Bool("all", false, "List tunnels across all sessions (the default on the origin)")
 
 	for _, c := range []*cobra.Command{tunnelAddCmd, tunnelRmCmd, tunnelListCmd} {
 		_ = c.RegisterFlagCompletionFunc("session", completeSessionIDs)
 	}
+	_ = tunnelRmCmd.RegisterFlagCompletionFunc("id", completeTunnelIDs)
 
 	tunnelCmd.AddCommand(tunnelAddCmd, tunnelRmCmd, tunnelListCmd, tunnelHelpCmd)
 }

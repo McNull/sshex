@@ -232,6 +232,12 @@ func firstSessionID(out string) string {
 			continue
 		}
 		if fields := strings.Fields(line); len(fields) > 0 {
+			if fields[0] == "ID" {
+				continue
+			}
+			if len(fields) > 1 {
+				return fields[1]
+			}
 			return fields[0]
 		}
 	}
