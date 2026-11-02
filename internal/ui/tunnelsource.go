@@ -17,16 +17,16 @@ import (
 type tunnelControl struct{}
 
 // List implements tunnels.Source. An empty session ID lists every session.
-func (tunnelControl) List(sessionID string) ([]tunnels.Tunnel, error) {
+func (tunnelControl) List(sessionID string) (tunnels.Snapshot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), sessionRequestTimeout)
 	defer cancel()
 
 	c, err := controlSessionClient()
 	if err != nil {
 		if errors.Is(err, sessionfile.ErrNone) {
-			return nil, nil
+			return tunnels.Snapshot{}, nil
 		}
-		return nil, err
+		return tunnels.Snapshot{}, err
 	}
 
 	if sessionID != "" {
@@ -69,7 +69,7 @@ func (tunnelControl) Remove(sessionID, tunnelID string) error {
 	return c.ForSession(sessionID).RemoveTunnelByID(ctx, tunnelID)
 }
 
-func listSessionTunnels(ctx context.Context, c *client.Client, sessionID string) ([]tunnels.Tunnel, error) {
+func listSessionTunnels(ctx context.Context, c *client.Client, sessionID string) (tunnels.Snapshot, error) {
 	scoped := c.ForSession(sessionID)
 	target := sessionID
 	stale := false
@@ -80,15 +80,18 @@ func listSessionTunnels(ctx context.Context, c *client.Client, sessionID string)
 
 	list, err := scoped.ListTunnels(ctx)
 	if err != nil {
-		return nil, err
+		return tunnels.Snapshot{}, err
 	}
-	return convertTunnels(list, target, stale), nil
+	return tunnels.Snapshot{
+		Tunnels:  convertTunnels(list, target, stale),
+		Sessions: 1,
+	}, nil
 }
 
-func listAllSessionTunnels(ctx context.Context, c *client.Client) ([]tunnels.Tunnel, error) {
+func listAllSessionTunnels(ctx context.Context, c *client.Client) (tunnels.Snapshot, error) {
 	sessions, err := c.ListSessions(ctx)
 	if err != nil {
-		return nil, err
+		return tunnels.Snapshot{}, err
 	}
 
 	out := make([]tunnels.Tunnel, 0)
@@ -96,7 +99,7 @@ func listAllSessionTunnels(ctx context.Context, c *client.Client) ([]tunnels.Tun
 	for _, session := range sessions {
 		list, err := c.ForSession(session.ID).ListTunnels(ctx)
 		if err != nil {
-			return nil, err
+			return tunnels.Snapshot{}, err
 		}
 		for _, item := range list {
 			if _, ok := seen[item.ID]; ok {
@@ -106,7 +109,7 @@ func listAllSessionTunnels(ctx context.Context, c *client.Client) ([]tunnels.Tun
 			out = append(out, tunnelFromResponse(item, sessionLabel(session), session.Stale))
 		}
 	}
-	return out, nil
+	return tunnels.Snapshot{Tunnels: out, Sessions: len(sessions)}, nil
 }
 
 func convertTunnels(list []api.TunnelResponse, target string, stale bool) []tunnels.Tunnel {

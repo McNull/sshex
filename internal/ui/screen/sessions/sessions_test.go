@@ -398,6 +398,47 @@ func TestEnterPushesSessionTunnels(t *testing.T) {
 	}
 }
 
+func TestPickerSelectsSession(t *testing.T) {
+	m := newScreen(&fakeSource{items: testSessions()}, &fakeCloser{})
+	var picked Session
+	m.onSelect = func(session Session) tea.Cmd {
+		picked = session
+		return screen.Replace(placeholder.New("Add tunnel", session.Target, m.styles))
+	}
+	if got := m.Title(); got != "Select session" {
+		t.Fatalf("title = %q, want Select session", got)
+	}
+	load(t, m)
+	m.Update(press(tea.KeyDown, ""))
+
+	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	msg := action(t, cmd)
+	if msg.Action != screen.ActionReplace || msg.Screen == nil {
+		t.Fatalf("action = %+v, want replace", msg)
+	}
+	if picked.ID != "b2" || picked.Target != "alice@ssh02" {
+		t.Fatalf("picked = %+v, want alice@ssh02/b2", picked)
+	}
+	if msg.Screen.Title() != "Add tunnel" {
+		t.Fatalf("screen title = %q, want Add tunnel", msg.Screen.Title())
+	}
+	if view := ansi.Strip(m.View()); !strings.Contains(view, "select a session for the new tunnel") {
+		t.Fatalf("picker hint is missing:\n%s", view)
+	}
+}
+
+func TestPickerIgnoresClose(t *testing.T) {
+	m := newScreen(&fakeSource{items: testSessions()}, &fakeCloser{})
+	m.onSelect = func(Session) tea.Cmd { return nil }
+	load(t, m)
+	focusSessionList(m)
+
+	m.Update(press('x', "x"))
+	if m.confirming {
+		t.Fatal("x started a close confirmation in the picker")
+	}
+}
+
 func TestEnterWithoutTunnelOpenerShowsStatus(t *testing.T) {
 	m := newScreen(&fakeSource{items: testSessions()}, &fakeCloser{})
 	load(t, m)

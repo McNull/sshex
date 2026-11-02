@@ -97,6 +97,7 @@ type Sessions struct {
 	SearchUp    key.Binding
 	SearchDown  key.Binding
 	Open        key.Binding
+	Select      key.Binding
 	Close       key.Binding
 	Refresh     key.Binding
 	FocusList   key.Binding
@@ -128,6 +129,12 @@ func DefaultSessions() Sessions {
 		Open: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("enter", "tunnels"),
+		),
+		// Select is enter with picker wording, used when the same screen
+		// chooses a session for another screen.
+		Select: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "select"),
 		),
 		Close: key.NewBinding(
 			key.WithKeys("x"),

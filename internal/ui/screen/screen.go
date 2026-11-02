@@ -43,6 +43,8 @@ const (
 	ActionPush
 	// ActionPop removes the top screen, revealing the previous one.
 	ActionPop
+	// ActionReplace swaps the top screen for another one.
+	ActionReplace
 	// ActionQuit exits the UI.
 	ActionQuit
 )
@@ -64,6 +66,13 @@ func Push(s Screen) tea.Cmd {
 func Pop() tea.Cmd {
 	return func() tea.Msg {
 		return ActionMsg{Action: ActionPop}
+	}
+}
+
+// Replace requests that the current screen is swapped for s.
+func Replace(s Screen) tea.Cmd {
+	return func() tea.Msg {
+		return ActionMsg{Action: ActionReplace, Screen: s}
 	}
 }
 

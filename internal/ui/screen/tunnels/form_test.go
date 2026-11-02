@@ -6,62 +6,73 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mcnull/sshex/internal/ui/screen"
+	"github.com/mcnull/sshex/internal/ui/theme"
 )
+
+func newFormScreen(controller Controller) *AddForm {
+	styles := theme.NewStyles(theme.Load(theme.Options{NoColor: true}))
+	form := NewAddForm(AddFormOptions{
+		Styles:     &styles,
+		Controller: controller,
+		SessionID:  "s1",
+		Target:     "bob@ssh01",
+	})
+	form.Resize(60, 12)
+	return form
+}
+
+func typeFormText(form *AddForm, text string) {
+	for _, r := range text {
+		form.Update(press(r, string(r)))
+	}
+}
 
 func TestAddFormRejectsInvalidPortsInline(t *testing.T) {
 	controller := &fakeController{}
-	m := newScreen(&fakeSource{items: testTunnels()}, controller)
-	load(t, m)
+	form := newFormScreen(controller)
 
-	m.Update(press('a', "a"))
-	if m.form == nil {
-		t.Fatal("a did not open the add form")
-	}
-	typeText(m, "0")
-	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	typeFormText(form, "0")
+	_, cmd := form.Update(press(tea.KeyEnter, ""))
 	if cmd != nil {
 		t.Fatalf("invalid spec returned a command (%T), want nil", cmd)
 	}
 	if len(controller.addCalls) != 0 {
 		t.Fatalf("add called with an invalid spec: %v", controller.addCalls)
 	}
-	if m.form == nil || !strings.Contains(m.form.err, "invalid port") {
-		t.Fatalf("inline validation error is missing: %+v", m.form)
+	if !strings.Contains(form.err, "invalid port") {
+		t.Fatalf("inline validation error is missing: %+v", form)
 	}
-	if view := ansi.Strip(m.View()); !strings.Contains(view, "invalid port") {
+	if view := ansi.Strip(form.View()); !strings.Contains(view, "invalid port") {
 		t.Fatalf("validation error is not rendered:\n%s", view)
 	}
 }
 
 func TestAddFormRejectsEmptySpec(t *testing.T) {
-	m := newScreen(&fakeSource{}, &fakeController{})
-	m.Update(press('a', "a"))
+	form := newFormScreen(&fakeController{})
 
-	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	_, cmd := form.Update(press(tea.KeyEnter, ""))
 	if cmd != nil {
 		t.Fatalf("empty spec returned a command (%T), want nil", cmd)
 	}
-	if m.form == nil || !strings.Contains(m.form.err, "enter a port") {
-		t.Fatalf("empty spec error is missing: %+v", m.form)
+	if !strings.Contains(form.err, "enter a port") {
+		t.Fatalf("empty spec error is missing: %+v", form)
 	}
 }
 
-func TestAddTunnelSuccess(t *testing.T) {
+func TestAddFormSuccessPops(t *testing.T) {
 	added := Tunnel{
 		ID: "new", SessionID: "s1", LocalPort: 8080,
 		TargetHost: "db", TargetPort: 5432, Direction: DirectionLocal, State: "active",
 	}
-	source := &fakeSource{items: []Tunnel{added}}
 	controller := &fakeController{added: added}
-	m := newScreen(source, controller)
-	load(t, m)
+	form := newFormScreen(controller)
 
-	m.Update(press('a', "a"))
-	typeText(m, "8080:db:5432")
-	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	typeFormText(form, "8080:db:5432")
+	_, cmd := form.Update(press(tea.KeyEnter, ""))
 	if cmd == nil {
 		t.Fatal("valid spec returned no command")
 	}
@@ -81,49 +92,45 @@ func TestAddTunnelSuccess(t *testing.T) {
 		t.Fatalf("add request = %+v, want %+v", call.request, want)
 	}
 
-	_, loadCmd := m.Update(msg)
-	if m.form != nil {
-		t.Fatal("form stayed open after a successful add")
-	}
-	if !strings.Contains(ansi.Strip(m.View()), "tunnel created.") {
-		t.Fatalf("add status is missing:\n%s", m.View())
-	}
-	if loadCmd != nil {
-		m.Update(loadCmd())
-	}
-	if got := m.selectedID(); got != "new" {
-		t.Fatalf("selected = %q, want the added tunnel", got)
-	}
-	if !strings.Contains(ansi.Strip(m.View()), "localhost:8080 > db:5432") {
-		t.Fatalf("added tunnel is not rendered:\n%s", m.View())
+	_, popCmd := form.Update(msg)
+	if action := action(t, popCmd); action.Action != screen.ActionPop {
+		t.Fatalf("success action = %v, want pop", action.Action)
 	}
 }
 
-func TestAddFormDirectionToggle(t *testing.T) {
-	controller := &fakeController{added: Tunnel{ID: "new", SessionID: "s1", State: "active"}}
-	m := newScreen(&fakeSource{}, controller)
-	m.Update(press('a', "a"))
+func TestAddFormShowsSessionAndDirection(t *testing.T) {
+	form := newFormScreen(&fakeController{})
 
-	typeText(m, "9000")
-	m.Update(press(tea.KeyRight, ""))
-	if m.form.direction != DirectionRemote {
-		t.Fatalf("direction = %q, want remote", m.form.direction)
+	view := ansi.Strip(form.View())
+	if !strings.Contains(view, "Add tunnel · bob@ssh01 · local") {
+		t.Fatalf("form header is missing the session or direction:\n%s", view)
 	}
-	if view := ansi.Strip(m.View()); !strings.Contains(view, "Add tunnel · remote") {
+
+	form.Update(press(tea.KeyRight, ""))
+	if form.direction != DirectionRemote {
+		t.Fatalf("direction = %q, want remote", form.direction)
+	}
+	if view := ansi.Strip(form.View()); !strings.Contains(view, "Add tunnel · bob@ssh01 · remote") {
 		t.Fatalf("remote direction is not shown:\n%s", view)
 	}
 
-	m.Update(press(tea.KeyLeft, ""))
-	if m.form.direction != DirectionLocal {
-		t.Fatalf("direction = %q, want local", m.form.direction)
+	form.Update(press(tea.KeyLeft, ""))
+	if form.direction != DirectionLocal {
+		t.Fatalf("direction = %q, want local", form.direction)
 	}
-	m.Update(press(tea.KeyRight, ""))
+}
 
-	_, cmd := m.Update(press(tea.KeyEnter, ""))
+func TestAddFormUsesRemoteDirection(t *testing.T) {
+	controller := &fakeController{added: Tunnel{ID: "new", SessionID: "s1", State: "active"}}
+	form := newFormScreen(controller)
+
+	typeFormText(form, "9000")
+	form.Update(press(tea.KeyRight, ""))
+	_, cmd := form.Update(press(tea.KeyEnter, ""))
 	if cmd == nil {
 		t.Fatal("valid spec returned no command")
 	}
-	m.Update(cmd())
+	form.Update(cmd())
 
 	if len(controller.addCalls) != 1 {
 		t.Fatalf("add calls = %v, want one", controller.addCalls)
@@ -138,46 +145,56 @@ func TestAddFormDirectionToggle(t *testing.T) {
 	}
 }
 
-func TestAddFormCancel(t *testing.T) {
-	m := newScreen(&fakeSource{items: testTunnels()}, &fakeController{})
-	load(t, m)
+func TestAddFormCancelPops(t *testing.T) {
+	form := newFormScreen(&fakeController{})
+	typeFormText(form, "8080")
 
-	m.Update(press('a', "a"))
-	typeText(m, "8080")
-	_, cmd := m.Update(press(tea.KeyEsc, ""))
-	if cmd != nil {
-		t.Fatalf("esc in the form returned a command (%T), want nil", cmd)
-	}
-	if m.form != nil {
-		t.Fatal("esc did not close the form")
-	}
-
-	_, cmd = m.Update(press(tea.KeyEsc, ""))
-	msg := action(t, cmd)
-	if msg.Action != screen.ActionPop {
-		t.Fatalf("second esc action = %v, want pop", msg.Action)
+	_, cmd := form.Update(press(tea.KeyEsc, ""))
+	if action := action(t, cmd); action.Action != screen.ActionPop {
+		t.Fatalf("esc action = %v, want pop", action.Action)
 	}
 }
 
-func TestAddErrorIsShownInline(t *testing.T) {
+func TestAddFormErrorIsShownInline(t *testing.T) {
 	controller := &fakeController{addErr: errors.New("boom")}
-	m := newScreen(&fakeSource{}, controller)
-	m.Update(press('a', "a"))
+	form := newFormScreen(controller)
 
-	typeText(m, "8080")
-	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	typeFormText(form, "8080")
+	_, cmd := form.Update(press(tea.KeyEnter, ""))
 	if cmd == nil {
 		t.Fatal("valid spec returned no command")
 	}
-	m.Update(cmd())
+	form.Update(cmd())
 
-	if m.form == nil {
-		t.Fatal("form closed after an add error")
+	if !strings.Contains(form.err, "could not add tunnel: boom") {
+		t.Fatalf("form error = %q, want the controller error", form.err)
 	}
-	if !strings.Contains(m.form.err, "could not add tunnel: boom") {
-		t.Fatalf("form error = %q, want the controller error", m.form.err)
-	}
-	if view := ansi.Strip(m.View()); !strings.Contains(view, "could not add tunnel: boom") {
+	if view := ansi.Strip(form.View()); !strings.Contains(view, "could not add tunnel: boom") {
 		t.Fatalf("add error is not rendered:\n%s", view)
+	}
+	if form.submitting {
+		t.Fatal("form still considers the failed add pending")
+	}
+}
+
+func TestAddFormViewFitsContentSize(t *testing.T) {
+	form := newFormScreen(&fakeController{})
+	form.Resize(48, 12)
+
+	lines := strings.Split(form.View(), "\n")
+	if len(lines) != 12 {
+		t.Fatalf("rendered %d lines, want 12", len(lines))
+	}
+	for i, line := range lines {
+		if width := lipgloss.Width(line); width > 48 {
+			t.Fatalf("line %d width = %d, want <= 48", i, width)
+		}
+	}
+}
+
+func TestAddFormTitle(t *testing.T) {
+	form := newFormScreen(&fakeController{})
+	if got := form.Title(); got != "Add tunnel" {
+		t.Fatalf("title = %q, want Add tunnel", got)
 	}
 }

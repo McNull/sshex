@@ -19,13 +19,15 @@ import (
 const refreshInterval = 5 * time.Second
 
 // Options configures the Tunnels screen. An empty SessionID lists every
-// session and hides the add action; Target labels the session-scoped rows.
+// session; Target labels the session-scoped rows. AddOpener supplies the screen
+// pushed by `a`, so the Tunnels screen never reaches the broker or Sessions.
 type Options struct {
 	Styles     *theme.Styles
 	Source     Source
 	Controller Controller
 	SessionID  string
 	Target     string
+	AddOpener  func() screen.Screen
 }
 
 // Model is the Tunnels screen.
@@ -35,10 +37,11 @@ type Model struct {
 	controller Controller
 	sessionID  string
 	target     string
+	addOpener  func() screen.Screen
 	keys       keys.Tunnels
-	form       *addForm
 
 	tunnels  []Tunnel
+	sessions int
 	selected int
 	offset   int
 
@@ -52,11 +55,10 @@ type Model struct {
 	status    string
 	statusErr bool
 
-	confirming      bool
-	confirmID       string
-	confirmSession  string
-	confirmFor      string
-	selectAfterLoad string
+	confirming     bool
+	confirmID      string
+	confirmSession string
+	confirmFor     string
 
 	width  int
 	height int
@@ -65,9 +67,9 @@ type Model struct {
 // loadedMsg carries the result of an asynchronous tunnel lookup. The epoch
 // discards a result requested during an earlier visit.
 type loadedMsg struct {
-	tunnels []Tunnel
-	err     error
-	epoch   uint64
+	snapshot Snapshot
+	err      error
+	epoch    uint64
 }
 
 // tickMsg asks the screen to refresh its list. The epoch ignores ticks that
@@ -75,12 +77,6 @@ type loadedMsg struct {
 // polling chain.
 type tickMsg struct {
 	epoch uint64
-}
-
-// addedMsg reports the result of adding a tunnel.
-type addedMsg struct {
-	tunnel Tunnel
-	err    error
 }
 
 // removedMsg reports the result of removing a tunnel.
@@ -97,6 +93,7 @@ func New(opts Options) *Model {
 		controller: opts.Controller,
 		sessionID:  opts.SessionID,
 		target:     opts.Target,
+		addOpener:  opts.AddOpener,
 		keys:       keys.DefaultTunnels(),
 		loading:    true,
 	}
@@ -108,7 +105,6 @@ func (m *Model) Init() tea.Cmd {
 	// A request from a previous visit may have completed while another screen
 	// was active, so its result never reached this model.
 	m.inflight = false
-	m.form = nil
 	m.status = ""
 	m.statusErr = false
 	m.clearConfirmation()
@@ -127,27 +123,24 @@ func (m *Model) Title() string { return "Tunnels" }
 
 // Keys implements screen.Screen.
 func (m *Model) Keys() []key.Binding {
-	if m.form != nil {
-		return []key.Binding{m.keys.Submit, m.keys.Direction, keys.Cancel()}
-	}
 	if m.confirming {
 		return []key.Binding{keys.Confirm(), keys.Cancel()}
 	}
 
 	screenKeys := []key.Binding{m.keys.Up, m.keys.Down}
-	if m.sessionID != "" {
-		screenKeys = append(screenKeys, m.keys.Add)
+	if m.mutationsAvailable() {
+		if m.addOpener != nil {
+			screenKeys = append(screenKeys, m.keys.Add)
+		}
+		screenKeys = append(screenKeys, m.keys.Remove)
 	}
-	return append(screenKeys, m.keys.Remove, m.keys.Refresh, keys.Back())
+	return append(screenKeys, m.keys.Refresh, keys.Back())
 }
 
 // Resize implements screen.Screen.
 func (m *Model) Resize(width, height int) {
 	m.width = width
 	m.height = height
-	if m.form != nil {
-		m.form.SetWidth(width)
-	}
 	m.clampOffset()
 }
 
@@ -156,8 +149,6 @@ func (m *Model) Update(msg tea.Msg) (screen.Screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case loadedMsg:
 		return m.handleLoaded(msg)
-	case addedMsg:
-		return m.handleAdded(msg)
 	case removedMsg:
 		return m.handleRemoved(msg)
 	case tickMsg:
@@ -172,9 +163,6 @@ func (m *Model) Update(msg tea.Msg) (screen.Screen, tea.Cmd) {
 }
 
 func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
-	if m.form != nil {
-		return m.handleFormKey(press)
-	}
 	if m.confirming {
 		switch {
 		case key.Matches(press, keys.Confirm()):
@@ -197,61 +185,26 @@ func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 	case key.Matches(press, m.keys.Down):
 		m.move(1)
 	case key.Matches(press, m.keys.Add):
-		if m.sessionID != "" {
-			m.openForm()
+		if m.mutationsAvailable() {
+			return m, m.openAdd()
 		}
 	case key.Matches(press, m.keys.Remove):
-		m.startRemove()
+		if m.mutationsAvailable() {
+			m.startRemove()
+		}
 	case key.Matches(press, m.keys.Refresh):
 		return m, m.load(false)
 	}
 	return m, nil
 }
 
-func (m *Model) handleFormKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
-	switch {
-	case key.Matches(press, keys.Cancel()):
-		m.form = nil
-		return m, nil
-	case key.Matches(press, m.keys.Submit):
-		return m, m.submitForm()
-	case key.Matches(press, m.keys.Direction):
-		m.form.ToggleDirection()
-		return m, nil
-	}
-	return m, m.form.update(press)
-}
-
-func (m *Model) openForm() {
-	if m.controller == nil {
-		m.statusErr = true
-		m.status = "adding tunnels is not available."
-		return
-	}
-	m.form = newAddForm(m.styles)
-	m.form.SetWidth(m.width)
-	m.status = ""
-	m.statusErr = false
-}
-
-func (m *Model) submitForm() tea.Cmd {
-	if m.form == nil {
+// openAdd pushes the screen supplied by the caller. Session-scoped views open
+// the add form directly; the all-sessions view opens a session picker.
+func (m *Model) openAdd() tea.Cmd {
+	if m.addOpener == nil {
 		return nil
 	}
-	req, err := m.form.Request()
-	if err != nil {
-		return nil
-	}
-	controller := m.controller
-	sessionID := m.sessionID
-	if controller == nil {
-		m.form.err = "adding tunnels is not available."
-		return nil
-	}
-	return func() tea.Msg {
-		tunnel, err := controller.Add(sessionID, req)
-		return addedMsg{tunnel: tunnel, err: err}
-	}
+	return screen.Push(m.addOpener())
 }
 
 func (m *Model) startRemove() {
@@ -303,10 +256,6 @@ func (m *Model) handleLoaded(msg loadedMsg) (screen.Screen, tea.Cmd) {
 	m.loading = false
 
 	selectedID := m.selectedID()
-	if m.selectAfterLoad != "" {
-		selectedID = m.selectAfterLoad
-		m.selectAfterLoad = ""
-	}
 	if msg.err != nil {
 		if len(m.tunnels) == 0 {
 			m.loadErr = msg.err
@@ -318,7 +267,8 @@ func (m *Model) handleLoaded(msg loadedMsg) (screen.Screen, tea.Cmd) {
 	}
 
 	m.loadErr = nil
-	m.tunnels = append([]Tunnel(nil), msg.tunnels...)
+	m.tunnels = append([]Tunnel(nil), msg.snapshot.Tunnels...)
+	m.sessions = msg.snapshot.Sessions
 	sortTunnels(m.tunnels)
 	m.loaded = true
 	m.restoreSelection(selectedID)
@@ -330,20 +280,6 @@ func (m *Model) handleLoaded(msg loadedMsg) (screen.Screen, tea.Cmd) {
 		m.statusErr = false
 	}
 	return m, nil
-}
-
-func (m *Model) handleAdded(msg addedMsg) (screen.Screen, tea.Cmd) {
-	if msg.err != nil {
-		if m.form != nil {
-			m.form.err = "could not add tunnel: " + msg.err.Error()
-		}
-		return m, nil
-	}
-	m.form = nil
-	m.statusErr = false
-	m.status = "tunnel created."
-	m.selectAfterLoad = msg.tunnel.ID
-	return m, m.load(false)
 }
 
 func (m *Model) handleRemoved(msg removedMsg) (screen.Screen, tea.Cmd) {
@@ -378,8 +314,8 @@ func (m *Model) load(showLoading bool) tea.Cmd {
 	}
 	sessionID := m.sessionID
 	return func() tea.Msg {
-		list, err := source.List(sessionID)
-		return loadedMsg{tunnels: list, err: err, epoch: epoch}
+		snapshot, err := source.List(sessionID)
+		return loadedMsg{snapshot: snapshot, err: err, epoch: epoch}
 	}
 }
 
@@ -482,6 +418,21 @@ func (m *Model) clampOffset() {
 	if m.offset < 0 {
 		m.offset = 0
 	}
+}
+
+// noSessions reports a successfully loaded empty session set. Mutation
+// actions are hidden in that state because a tunnel needs a session.
+func (m *Model) noSessions() bool {
+	return m.loaded && !m.loading && m.loadErr == nil && m.sessions == 0
+}
+
+// mutationsAvailable hides add/remove until the all-sessions view knows that a
+// session exists. The session-scoped view already knows its session.
+func (m *Model) mutationsAvailable() bool {
+	if m.sessionID == "" && !m.loaded {
+		return false
+	}
+	return !m.noSessions()
 }
 
 // targetFor returns the session label shown on the detail line.

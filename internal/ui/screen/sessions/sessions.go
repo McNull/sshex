@@ -55,12 +55,15 @@ type Closer interface {
 // never reaches the broker itself; the caller supplies the opener.
 type TunnelOpener func(sessionID, target string) screen.Screen
 
-// Options configures the Sessions screen.
+// Options configures the Sessions screen. OnSelect turns the screen into a
+// picker: enter chooses the session instead of opening its tunnels, closing is
+// disabled, and the callback owns the navigation.
 type Options struct {
 	Styles       *theme.Styles
 	Source       Source
 	Closer       Closer
 	TunnelOpener TunnelOpener
+	OnSelect     func(Session) tea.Cmd
 }
 
 // Model is the Sessions screen.
@@ -69,6 +72,7 @@ type Model struct {
 	source       Source
 	closer       Closer
 	tunnelOpener TunnelOpener
+	onSelect     func(Session) tea.Cmd
 	keys         keys.Sessions
 	input        textinput.Model
 
@@ -131,6 +135,7 @@ func New(opts Options) *Model {
 		source:       opts.Source,
 		closer:       opts.Closer,
 		tunnelOpener: opts.TunnelOpener,
+		onSelect:     opts.OnSelect,
 		keys:         keys.DefaultSessions(),
 		input:        input,
 		focus:        focusSearch,
@@ -153,14 +158,28 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // Resume implements screen.Resumable. It refreshes the list and restarts the
-// poll loop after the tunnel screen is popped.
+// poll loop after a child screen is popped.
 func (m *Model) Resume() tea.Cmd {
 	m.inflight = false
 	return tea.Batch(m.load(false), m.startPolling())
 }
 
 // Title implements screen.Screen.
-func (m *Model) Title() string { return "Sessions" }
+func (m *Model) Title() string {
+	if m.picker() {
+		return "Select session"
+	}
+	return "Sessions"
+}
+
+func (m *Model) picker() bool { return m.onSelect != nil }
+
+func (m *Model) openBinding() key.Binding {
+	if m.picker() {
+		return m.keys.Select
+	}
+	return m.keys.Open
+}
 
 // Keys implements screen.Screen.
 func (m *Model) Keys() []key.Binding {
@@ -168,12 +187,13 @@ func (m *Model) Keys() []key.Binding {
 		return []key.Binding{keys.Confirm(), keys.Cancel()}
 	}
 	if m.focus == focusList {
-		return []key.Binding{
-			m.keys.Up, m.keys.Down, m.keys.Open, m.keys.Close, m.keys.Refresh,
-			m.keys.FocusSearch, m.keys.Backspace, keys.Back(),
+		screenKeys := []key.Binding{m.keys.Up, m.keys.Down, m.openBinding()}
+		if !m.picker() {
+			screenKeys = append(screenKeys, m.keys.Close)
 		}
+		return append(screenKeys, m.keys.Refresh, m.keys.FocusSearch, m.keys.Backspace, keys.Back())
 	}
-	return []key.Binding{m.keys.SearchUp, m.keys.SearchDown, m.keys.Open, m.keys.FocusList, keys.Back()}
+	return []key.Binding{m.keys.SearchUp, m.keys.SearchDown, m.openBinding(), m.keys.FocusList, keys.Back()}
 }
 
 // Resize implements screen.Screen.
@@ -229,8 +249,8 @@ func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 			m.move(-1)
 		case key.Matches(press, m.keys.SearchDown):
 			m.move(1)
-		case key.Matches(press, m.keys.Open):
-			return m.openTunnels()
+		case key.Matches(press, m.openBinding()):
+			return m.openSelected()
 		}
 
 		before := m.input.Value()
@@ -252,10 +272,12 @@ func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 		m.move(-1)
 	case key.Matches(press, m.keys.Down):
 		m.move(1)
-	case key.Matches(press, m.keys.Open):
-		return m.openTunnels()
+	case key.Matches(press, m.openBinding()):
+		return m.openSelected()
 	case key.Matches(press, m.keys.Close):
-		m.startClose()
+		if !m.picker() {
+			m.startClose()
+		}
 	case key.Matches(press, m.keys.Refresh):
 		return m, m.load(false)
 	}
@@ -350,10 +372,13 @@ func (m *Model) handleClosed(msg closedMsg) (screen.Screen, tea.Cmd) {
 	return m, m.load(false)
 }
 
-func (m *Model) openTunnels() (screen.Screen, tea.Cmd) {
+func (m *Model) openSelected() (screen.Screen, tea.Cmd) {
 	session, ok := m.selectedSession()
 	if !ok {
 		return m, nil
+	}
+	if m.onSelect != nil {
+		return m, m.onSelect(session)
 	}
 	if m.tunnelOpener == nil {
 		m.statusErr = true
@@ -776,6 +801,9 @@ func (m *Model) statusView() string {
 		message = fmt.Sprintf("%d %s", len(m.sessions), plural(len(m.sessions), "session", "sessions"))
 	} else {
 		message = fmt.Sprintf("%d of %d sessions", len(m.filtered), len(m.sessions))
+	}
+	if m.picker() {
+		message = "select a session for the new tunnel · " + message
 	}
 	return m.styles.ScreenHint.Render(truncate(message, m.width))
 }

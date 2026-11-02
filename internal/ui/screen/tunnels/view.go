@@ -12,9 +12,6 @@ func (m *Model) View() string {
 	if m.width <= 0 || m.height <= 0 {
 		return ""
 	}
-	if m.form != nil {
-		return m.formView()
-	}
 
 	lines := make([]string, 0, m.height)
 	lines = append(lines, m.headerView())
@@ -25,31 +22,6 @@ func (m *Model) View() string {
 	}
 	lines = append(lines, m.statusView())
 
-	for i := range lines {
-		lines[i] = padRight(lines[i], m.width)
-	}
-	return strings.Join(lines, "\n")
-}
-
-func (m *Model) formView() string {
-	lines := []string{
-		m.styles.ScreenTitle.Render("Add tunnel · " + m.form.directionLabel()),
-		"",
-		m.form.input.View(),
-	}
-
-	if m.form.err != "" {
-		lines = append(lines, m.styles.Error.Render(truncate(m.form.err, m.width)))
-	} else {
-		lines = append(lines, m.styles.ScreenHint.Render("port[:target[:remote-port]]"))
-	}
-
-	for len(lines) < m.height {
-		lines = append(lines, "")
-	}
-	if len(lines) > m.height {
-		lines = lines[:m.height]
-	}
 	for i := range lines {
 		lines[i] = padRight(lines[i], m.width)
 	}
@@ -77,6 +49,8 @@ func (m *Model) listView() []string {
 	case m.loadErr != nil:
 		message := truncate("could not load tunnels: "+m.loadErr.Error(), m.width)
 		return []string{m.styles.Error.Render(message)}
+	case m.noSessions():
+		return []string{m.styles.ScreenHint.Render("no active sessions")}
 	case len(m.tunnels) == 0:
 		return []string{m.styles.ScreenHint.Render("no active tunnels")}
 	}

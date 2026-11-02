@@ -199,6 +199,14 @@ func (m *Model) apply(action screen.ActionMsg) tea.Cmd {
 			return resumable.Resume()
 		}
 		return nil
+	case screen.ActionReplace:
+		if action.Screen == nil {
+			return nil
+		}
+		width, height := m.contentSize()
+		action.Screen.Resize(width, height)
+		m.stack.ReplaceTop(action.Screen)
+		return action.Screen.Init()
 	case screen.ActionQuit:
 		return tea.Quit
 	default:
@@ -242,8 +250,30 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 		Runner: runner,
 	})
 
+	// The add form is the same screen from both tunnel scopes. The menu flow
+	// chooses the session first; the session-scoped flow already knows it.
+	newAddForm := func(sessionID, target string) screen.Screen {
+		return tunnelscreen.NewAddForm(tunnelscreen.AddFormOptions{
+			Styles:     styles,
+			Controller: tunnelController,
+			SessionID:  sessionID,
+			Target:     target,
+		})
+	}
+
+	// The picker reuses the Sessions screen, whose current-session selection
+	// makes it a single enter away from the add form inside a remote shell.
+	sessionPicker := sessions.New(sessions.Options{
+		Styles: styles,
+		Source: sessionSource,
+		Closer: sessionCloser,
+		OnSelect: func(session sessions.Session) tea.Cmd {
+			return screen.Replace(newAddForm(session.ID, session.Target))
+		},
+	})
+
 	// One cached tunnel screen per session keeps its selection across a trip
-	// back to Sessions. The menu view shows every session and cannot add.
+	// back to Sessions.
 	sessionTunnels := make(map[string]screen.Screen)
 	openSessionTunnels := func(sessionID, target string) screen.Screen {
 		if cached, ok := sessionTunnels[sessionID]; ok {
@@ -255,6 +285,7 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 			Controller: tunnelController,
 			SessionID:  sessionID,
 			Target:     target,
+			AddOpener:  func() screen.Screen { return newAddForm(sessionID, target) },
 		})
 		sessionTunnels[sessionID] = opened
 		return opened
@@ -263,6 +294,7 @@ func defaultMenuItems(styles *theme.Styles, source connect.HostSource, runner co
 		Styles:     styles,
 		Source:     tunnelSource,
 		Controller: tunnelController,
+		AddOpener:  func() screen.Screen { return sessionPicker },
 	})
 
 	// Likewise keep the Sessions screen so its selection survives a menu

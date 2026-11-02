@@ -39,9 +39,15 @@ type AddRequest struct {
 	Direction  Direction
 }
 
+// Snapshot is one tunnel listing plus the number of sessions it covers.
+type Snapshot struct {
+	Tunnels  []Tunnel
+	Sessions int
+}
+
 // Source lists the active tunnels. An empty session ID lists every session.
 type Source interface {
-	List(sessionID string) ([]Tunnel, error)
+	List(sessionID string) (Snapshot, error)
 }
 
 // Controller adds and removes tunnels.

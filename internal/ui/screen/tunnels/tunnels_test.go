@@ -15,16 +15,22 @@ import (
 )
 
 type fakeSource struct {
-	items     []Tunnel
-	err       error
-	calls     int
-	requested []string
+	items      []Tunnel
+	sessions   int
+	noSessions bool
+	err        error
+	calls      int
+	requested  []string
 }
 
-func (s *fakeSource) List(sessionID string) ([]Tunnel, error) {
+func (s *fakeSource) List(sessionID string) (Snapshot, error) {
 	s.calls++
 	s.requested = append(s.requested, sessionID)
-	return s.items, s.err
+	sessions := s.sessions
+	if sessions == 0 && !s.noSessions {
+		sessions = 1
+	}
+	return Snapshot{Tunnels: s.items, Sessions: sessions}, s.err
 }
 
 type addCall struct {
@@ -160,6 +166,63 @@ func TestLoadingAndEmptyStates(t *testing.T) {
 	load(t, m)
 	if !strings.Contains(ansi.Strip(m.View()), "no active tunnels") {
 		t.Fatalf("empty state is missing:\n%s", m.View())
+	}
+}
+
+func TestNoActiveSessionsShowsMessageAndHidesMutations(t *testing.T) {
+	controller := &fakeController{}
+	m := newAllScreen(&fakeSource{noSessions: true}, controller)
+	load(t, m)
+
+	view := ansi.Strip(m.View())
+	if !strings.Contains(view, "no active sessions") {
+		t.Fatalf("no-session state is missing:\n%s", view)
+	}
+	if strings.Contains(view, "no active tunnels") {
+		t.Fatalf("no-session state is shown as an empty tunnel list:\n%s", view)
+	}
+	for _, binding := range m.Keys() {
+		switch binding.Help().Key {
+		case "a", "x":
+			t.Fatalf("mutation key %q is still shown with no sessions", binding.Help().Key)
+		}
+	}
+
+	opened := false
+	m.addOpener = func() screen.Screen {
+		opened = true
+		return NewAddForm(AddFormOptions{Styles: m.styles, Controller: controller, SessionID: "s1"})
+	}
+	if _, cmd := m.Update(press('a', "a")); cmd != nil {
+		t.Fatalf("a returned a command with no sessions: %T", cmd)
+	}
+	if opened {
+		t.Fatal("add opener was called with no sessions")
+	}
+	m.Update(press('x', "x"))
+	if m.confirming {
+		t.Fatal("remove confirmation started with no sessions")
+	}
+}
+
+func TestEmptyTunnelListWithSessionsKeepsAdd(t *testing.T) {
+	m := newAllScreen(&fakeSource{sessions: 1}, &fakeController{})
+	m.addOpener = func() screen.Screen {
+		return NewAddForm(AddFormOptions{Styles: m.styles, Controller: &fakeController{}, SessionID: "s1"})
+	}
+	load(t, m)
+
+	if view := ansi.Strip(m.View()); !strings.Contains(view, "no active tunnels") {
+		t.Fatalf("empty tunnel state is missing:\n%s", view)
+	}
+	hasAdd := false
+	for _, binding := range m.Keys() {
+		if binding.Help().Key == "a" {
+			hasAdd = true
+		}
+	}
+	if !hasAdd {
+		t.Fatal("add is hidden while sessions are active")
 	}
 }
 
@@ -314,7 +377,7 @@ func TestStaleLoadResultIsIgnored(t *testing.T) {
 	cmd := m.load(false)
 	staleEpoch := m.loadEpoch - 1
 
-	m.Update(loadedMsg{tunnels: []Tunnel{{ID: "stale"}}, epoch: staleEpoch})
+	m.Update(loadedMsg{snapshot: Snapshot{Tunnels: []Tunnel{{ID: "stale"}}}, epoch: staleEpoch})
 	if len(m.tunnels) != 0 {
 		t.Fatalf("stale result was applied: %+v", m.tunnels)
 	}
@@ -350,7 +413,7 @@ func TestEscPopsScreen(t *testing.T) {
 	}
 }
 
-func TestAllSessionsListsEverySessionWithoutAdd(t *testing.T) {
+func TestAllSessionsListsEverySessionAndOpensAdd(t *testing.T) {
 	source := &fakeSource{items: testTunnels()}
 	m := newAllScreen(source, &fakeController{})
 	load(t, m)
@@ -363,9 +426,40 @@ func TestAllSessionsListsEverySessionWithoutAdd(t *testing.T) {
 		t.Fatalf("all-sessions view is missing tunnels:\n%s", view)
 	}
 
-	m.Update(press('a', "a"))
-	if m.form != nil {
-		t.Fatal("all-sessions view opened the add form")
+	m.addOpener = func() screen.Screen {
+		return NewAddForm(AddFormOptions{
+			Styles:     m.styles,
+			Controller: &fakeController{},
+			SessionID:  "s1",
+			Target:     "bob@ssh01",
+		})
+	}
+	_, cmd := m.Update(press('a', "a"))
+	msg := action(t, cmd)
+	if msg.Action != screen.ActionPush || msg.Screen == nil {
+		t.Fatalf("action = %+v, want push", msg)
+	}
+	if got := msg.Screen.Title(); got != "Add tunnel" {
+		t.Fatalf("screen title = %q, want Add tunnel", got)
+	}
+}
+
+func TestSessionScopeAddPushesOpener(t *testing.T) {
+	m := newScreen(&fakeSource{items: testTunnels()}, &fakeController{})
+	load(t, m)
+
+	opened := false
+	m.addOpener = func() screen.Screen {
+		opened = true
+		return NewAddForm(AddFormOptions{Styles: m.styles, Controller: &fakeController{}, SessionID: "s1"})
+	}
+	_, cmd := m.Update(press('a', "a"))
+	msg := action(t, cmd)
+	if msg.Action != screen.ActionPush || msg.Screen == nil {
+		t.Fatalf("action = %+v, want push", msg)
+	}
+	if !opened {
+		t.Fatal("add opener was not called")
 	}
 }
 

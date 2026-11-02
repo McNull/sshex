@@ -218,12 +218,17 @@ func TestModelShowsUpdateAvailable(t *testing.T) {
 
 type fakeTunnelSource struct {
 	items     []tunnels.Tunnel
+	sessions  int
 	requested []string
 }
 
-func (s *fakeTunnelSource) List(sessionID string) ([]tunnels.Tunnel, error) {
+func (s *fakeTunnelSource) List(sessionID string) (tunnels.Snapshot, error) {
 	s.requested = append(s.requested, sessionID)
-	return s.items, nil
+	sessions := s.sessions
+	if sessions == 0 {
+		sessions = 1
+	}
+	return tunnels.Snapshot{Tunnels: s.items, Sessions: sessions}, nil
 }
 
 type fakeTunnelController struct{}
@@ -304,6 +309,75 @@ func TestModelOpensAllSessionTunnels(t *testing.T) {
 	}
 	if got := fmt.Sprint(source.requested); got != "[]" {
 		t.Fatalf("requested sessions = %v, want one all-sessions request", got)
+	}
+}
+
+func TestMenuTunnelAddUsesPickerAndForm(t *testing.T) {
+	sessionSource := &fakeSessionSource{items: []sessions.Session{
+		{ID: "s1", Target: "bob@ssh01", Host: "ssh01", State: "active"},
+	}}
+	m := New(ModelOptions{
+		Version:           "1.2.3",
+		HasDarkBackground: true,
+		NoColor:           true,
+		SessionSource:     sessionSource,
+		SessionCloser:     fakeSessionCloser{},
+		TunnelSource:      &fakeTunnelSource{},
+		TunnelController:  fakeTunnelController{},
+	})
+	resize(t, m, 80, 24)
+
+	// Open the all-sessions tunnel list.
+	m.Update(press(tea.KeyDown, ""))
+	m.Update(press(tea.KeyDown, ""))
+	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	_, tunnelCmd := m.Update(run(t, cmd).(screen.ActionMsg))
+	m.Update(firstBatch(t, tunnelCmd))
+
+	// `a` pushes the session picker.
+	_, cmd = m.Update(press('a', "a"))
+	action := run(t, cmd).(screen.ActionMsg)
+	if action.Action != screen.ActionPush {
+		t.Fatalf("a action = %v, want push", action.Action)
+	}
+	_, pickerCmd := m.Update(action)
+	if title := m.stack.Top().Title(); title != "Select session" {
+		t.Fatalf("picker title = %q, want Select session", title)
+	}
+	m.Update(firstBatch(t, pickerCmd))
+	if m.stack.Len() != 3 {
+		t.Fatalf("stack length = %d, want menu, tunnels and picker", m.stack.Len())
+	}
+
+	// Enter replaces the picker with the add form.
+	_, cmd = m.Update(press(tea.KeyEnter, ""))
+	action = run(t, cmd).(screen.ActionMsg)
+	if action.Action != screen.ActionReplace {
+		t.Fatalf("enter action = %v, want replace", action.Action)
+	}
+	_, formCmd := m.Update(action)
+	if title := m.stack.Top().Title(); title != "Add tunnel" {
+		t.Fatalf("form title = %q, want Add tunnel", title)
+	}
+	if m.stack.Len() != 3 {
+		t.Fatalf("stack length after replace = %d, want 3", m.stack.Len())
+	}
+	if formCmd != nil {
+		formCmd()
+	}
+
+	// Cancelling the form returns straight to the tunnel list.
+	_, cmd = m.Update(press(tea.KeyEsc, ""))
+	action = run(t, cmd).(screen.ActionMsg)
+	if action.Action != screen.ActionPop {
+		t.Fatalf("esc action = %v, want pop", action.Action)
+	}
+	m.Update(action)
+	if title := m.stack.Top().Title(); title != "Tunnels" {
+		t.Fatalf("screen after cancel = %q, want Tunnels", title)
+	}
+	if m.stack.Len() != 2 {
+		t.Fatalf("stack length after cancel = %d, want 2", m.stack.Len())
 	}
 }
 
