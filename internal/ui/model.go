@@ -4,7 +4,6 @@ import (
 	"os"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/mcnull/sshex/internal/sessionfile"
 	"github.com/mcnull/sshex/internal/ui/component/footer"
 	"github.com/mcnull/sshex/internal/ui/component/header"
+	"github.com/mcnull/sshex/internal/ui/component/help"
 	"github.com/mcnull/sshex/internal/ui/keys"
 	"github.com/mcnull/sshex/internal/ui/screen"
 	commandscreen "github.com/mcnull/sshex/internal/ui/screen/commands"
@@ -97,6 +97,8 @@ type Model struct {
 	global    keys.Global
 	header    header.Model
 	footer    footer.Model
+	help      help.Model
+	helpOpen  bool
 	stack     *screen.Stack
 	width     int
 	height    int
@@ -189,6 +191,7 @@ func New(opts ModelOptions) *Model {
 		global:    keys.DefaultGlobal(),
 		header:    header.New(&styles, opts.Version, origin, client),
 		footer:    footer.New(&styles),
+		help:      help.New(&styles),
 		stack: screen.NewStack(menu.New(
 			defaultMenuItems(&styles, screenDeps{
 				connectSource:     source,
@@ -256,8 +259,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setDarkBackground(msg.IsDark())
 		return m, nil
 	case tea.KeyPressMsg:
-		if key.Matches(msg, m.global.Quit) {
+		if keys.Matches(msg, m.global.Quit) {
 			return m, tea.Quit
+		}
+		if m.helpOpen {
+			if msg.Code == tea.KeyEsc {
+				m.helpOpen = false
+			}
+			return m, nil
+		}
+		canOpenHelp := true
+		if availability, ok := m.stack.Top().(screen.HelpKeyAvailability); ok {
+			canOpenHelp = availability.CanOpenHelp()
+		}
+		if canOpenHelp && keys.Matches(msg, keys.Help()) {
+			m.helpOpen = true
+			return m, nil
 		}
 	}
 
@@ -286,11 +303,27 @@ func (m *Model) render() string {
 	}
 
 	top := m.stack.Top()
+	if m.helpOpen {
+		text := ""
+		if provider, ok := top.(screen.HelpProvider); ok {
+			text = provider.HelpText()
+		}
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			m.header.View(),
+			m.help.View(top.Title(), text, append(top.Keys(), m.global.Quit)),
+			m.footer.ViewHelpClose(),
+		)
+	}
+	footer := m.footer.View(top.Keys())
+	if availability, ok := top.(screen.HelpKeyAvailability); ok && !availability.CanOpenHelp() {
+		footer = m.footer.ViewWithoutHelp(top.Keys())
+	}
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.header.View(),
 		top.View(),
-		m.footer.View(top.Keys()),
+		footer,
 	)
 }
 
@@ -336,6 +369,7 @@ func (m *Model) resize(width, height int) {
 	m.height = height
 	m.header.Resize(width)
 	m.footer.Resize(width)
+	m.help.Resize(width, max(height-m.header.Height()-m.footer.Height(), 0))
 
 	contentWidth, contentHeight := m.contentSize()
 	m.stack.Top().Resize(contentWidth, contentHeight)

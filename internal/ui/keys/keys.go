@@ -3,376 +3,447 @@
 // which keeps the footer help and the actual handling in sync.
 package keys
 
-import "charm.land/bubbles/v2/key"
+import (
+	"strings"
+
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+)
+
+// Binding combines an active key binding with optional expanded help text.
+type Binding struct {
+	key.Binding
+	longHelp string
+}
+
+type bindingConfig struct {
+	keys           []string
+	helpKey, short string
+	longHelp       string
+}
+
+// BindingOption configures an application key binding. Use keys.WithKeys to
+// supply accepted keystrokes and keys.WithHelp to provide help labels.
+type BindingOption interface {
+	apply(*bindingConfig)
+}
+
+type bindingOptionFunc func(*bindingConfig)
+
+func (f bindingOptionFunc) apply(config *bindingConfig) { f(config) }
+
+// WithHelp supplies the compact footer label and optional expanded help-panel
+// description for a key binding.
+func WithHelp(helpKey, short string, long ...string) BindingOption {
+	return bindingOptionFunc(func(config *bindingConfig) {
+		config.helpKey = helpKey
+		config.short = short
+		if len(long) > 0 {
+			config.longHelp = strings.TrimSpace(long[0])
+		}
+	})
+}
+
+// WithKeys sets the keys that activate a binding.
+func WithKeys(names ...string) BindingOption {
+	return bindingOptionFunc(func(config *bindingConfig) { config.keys = names })
+}
+
+// NewBinding creates a UI key binding from WithKeys and WithHelp options.
+func NewBinding(options ...BindingOption) Binding {
+	config := bindingConfig{}
+	for _, option := range options {
+		option.apply(&config)
+	}
+	binding := key.NewBinding(key.WithKeys(config.keys...), key.WithHelp(config.helpKey, config.short))
+	return Binding{Binding: binding, longHelp: config.longHelp}
+}
+
+// LongHelp returns the expanded description, falling back to the compact
+// footer description when no long description was supplied.
+func (b Binding) LongHelp() string {
+	if b.longHelp != "" {
+		return b.longHelp
+	}
+	return b.Help().Desc
+}
+
+// Matches reports whether a keypress matches an application binding.
+func Matches(press tea.KeyPressMsg, binding Binding) bool {
+	return key.Matches(press, binding.Binding)
+}
 
 // Global contains bindings that work on every screen.
 type Global struct {
-	Quit key.Binding
+	Quit Binding
 }
 
 // DefaultGlobal returns the bindings the root model always handles.
 func DefaultGlobal() Global {
 	return Global{
-		Quit: key.NewBinding(
-			key.WithKeys("ctrl+c"),
-			key.WithHelp("ctrl+c", "quit"),
+		Quit: NewBinding(
+			WithKeys("ctrl+c"),
+			WithHelp("ctrl+c", "quit", "Exit the terminal interface."),
 		),
 	}
 }
 
+// Help returns the binding that opens the contextual help overlay.
+func Help() Binding {
+	return NewBinding(
+		WithKeys("h"),
+		WithHelp("h", "help", "Show the available keys and actions for this screen."),
+	)
+}
+
 // Menu contains the bindings of the main menu.
 type Menu struct {
-	Up     key.Binding
-	Down   key.Binding
-	Select key.Binding
-	Quit   key.Binding
+	Up     Binding
+	Down   Binding
+	Select Binding
+	Quit   Binding
 }
 
 // DefaultMenu returns the main menu bindings.
 func DefaultMenu() Menu {
 	return Menu{
-		Up: key.NewBinding(
-			key.WithKeys("up", "k"),
-			key.WithHelp("↑/k", "up"),
+		Up: NewBinding(
+			WithKeys("up", "k"),
+			WithHelp("↑/k", "up", "Move the selection to the previous menu item."),
 		),
-		Down: key.NewBinding(
-			key.WithKeys("down", "j"),
-			key.WithHelp("↓/j", "down"),
+		Down: NewBinding(
+			WithKeys("down", "j"),
+			WithHelp("↓/j", "down", "Move the selection to the next menu item."),
 		),
-		Select: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "select"),
+		Select: NewBinding(
+			WithKeys("enter"),
+			WithHelp("enter", "select", "Open the selected section."),
 		),
-		Quit: key.NewBinding(
-			key.WithKeys("q", "esc"),
-			key.WithHelp("q/esc", "quit"),
+		Quit: NewBinding(
+			WithKeys("q", "esc"),
+			WithHelp("q/esc", "quit", "Exit the terminal interface."),
 		),
 	}
 }
 
 // Connect contains the bindings of the Connect screen.
 type Connect struct {
-	Up          key.Binding
-	Down        key.Binding
-	Select      key.Binding
-	FocusList   key.Binding
-	FocusSearch key.Binding
-	Backspace   key.Binding
+	Up          Binding
+	Down        Binding
+	Select      Binding
+	FocusList   Binding
+	FocusSearch Binding
+	Backspace   Binding
 }
 
 // DefaultConnect returns the Connect screen bindings.
 func DefaultConnect() Connect {
 	return Connect{
-		Up: key.NewBinding(
-			key.WithKeys("up", "k"),
-			key.WithHelp("↑/k", "up"),
+		Up: NewBinding(
+			WithKeys("up", "k"),
+			WithHelp("↑/k", "up", "Move the selection to the previous host."),
 		),
-		Down: key.NewBinding(
-			key.WithKeys("down", "j"),
-			key.WithHelp("↓/j", "down"),
+		Down: NewBinding(
+			WithKeys("down", "j"),
+			WithHelp("↓/j", "down", "Move the selection to the next host."),
 		),
-		Select: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "connect"),
+		Select: NewBinding(
+			WithKeys("enter"),
+			WithHelp("enter", "connect", "Connect to the host."),
 		),
-		FocusList: key.NewBinding(
-			key.WithKeys("tab", "shift+tab"),
-			key.WithHelp("tab", "hosts"),
+		FocusList: NewBinding(
+			WithKeys("tab", "shift+tab"),
+			WithHelp("tab", "hosts", "Move focus to the host list."),
 		),
-		FocusSearch: key.NewBinding(
-			key.WithKeys("tab", "shift+tab"),
-			key.WithHelp("tab", "search"),
+		FocusSearch: NewBinding(
+			WithKeys("tab", "shift+tab"),
+			WithHelp("tab", "search", "Move focus to the host search field."),
 		),
-		Backspace: key.NewBinding(
-			key.WithKeys("backspace"),
-			key.WithHelp("⌫", "edit"),
+		Backspace: NewBinding(
+			WithKeys("backspace"),
+			WithHelp("⌫", "edit", "Return focus to search and remove the last character."),
 		),
 	}
 }
 
 // Sessions contains the bindings of the Sessions screen.
 type Sessions struct {
-	Up          key.Binding
-	Down        key.Binding
-	SearchUp    key.Binding
-	SearchDown  key.Binding
-	Open        key.Binding
-	Select      key.Binding
-	Close       key.Binding
-	Refresh     key.Binding
-	FocusList   key.Binding
-	FocusSearch key.Binding
-	Backspace   key.Binding
+	Up          Binding
+	Down        Binding
+	SearchUp    Binding
+	SearchDown  Binding
+	Open        Binding
+	Select      Binding
+	Close       Binding
+	Refresh     Binding
+	FocusList   Binding
+	FocusSearch Binding
+	Backspace   Binding
 }
 
 // DefaultSessions returns the Sessions screen bindings.
 func DefaultSessions() Sessions {
 	return Sessions{
-		Up: key.NewBinding(
-			key.WithKeys("up", "k"),
-			key.WithHelp("↑/k", "up"),
+		Up: NewBinding(
+			WithKeys("up", "k"),
+			WithHelp("↑/k", "up", "Move the selection to the previous active session."),
 		),
-		Down: key.NewBinding(
-			key.WithKeys("down", "j"),
-			key.WithHelp("↓/j", "down"),
+		Down: NewBinding(
+			WithKeys("down", "j"),
+			WithHelp("↓/j", "down", "Move the selection to the next active session."),
 		),
 		// The search field needs j and k as text, so it only treats the arrow
 		// keys as movement.
-		SearchUp: key.NewBinding(
-			key.WithKeys("up"),
-			key.WithHelp("↑", "up"),
+		SearchUp: NewBinding(
+			WithKeys("up"),
+			WithHelp("↑", "up", "Move the selection to the previous session."),
 		),
-		SearchDown: key.NewBinding(
-			key.WithKeys("down"),
-			key.WithHelp("↓", "down"),
+		SearchDown: NewBinding(
+			WithKeys("down"),
+			WithHelp("↓", "down", "Move the selection to the next session."),
 		),
-		Open: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "tunnels"),
+		Open: NewBinding(
+			WithKeys("enter"),
+			WithHelp("enter", "tunnels", "Open the tunnels associated with the selected session."),
 		),
 		// Select is enter with picker wording, used when the same screen
 		// chooses a session for another screen.
-		Select: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "select"),
+		Select: NewBinding(
+			WithKeys("enter"),
+			WithHelp("enter", "select", "Choose this session for the requested action."),
 		),
-		Close: key.NewBinding(
-			key.WithKeys("x"),
-			key.WithHelp("x", "close session"),
+		Close: NewBinding(
+			WithKeys("x"),
+			WithHelp("x", "close session", "Close the selected session."),
 		),
-		Refresh: key.NewBinding(
-			key.WithKeys("r"),
-			key.WithHelp("r", "refresh"),
+		Refresh: NewBinding(
+			WithKeys("r"),
+			WithHelp("r", "refresh", "Reload the active session list now."),
 		),
-		FocusList: key.NewBinding(
-			key.WithKeys("tab", "shift+tab"),
-			key.WithHelp("tab", "sessions"),
+		FocusList: NewBinding(
+			WithKeys("tab", "shift+tab"),
+			WithHelp("tab", "sessions", "Move focus to the session list."),
 		),
-		FocusSearch: key.NewBinding(
-			key.WithKeys("tab", "shift+tab"),
-			key.WithHelp("tab", "search"),
+		FocusSearch: NewBinding(
+			WithKeys("tab", "shift+tab"),
+			WithHelp("tab", "search", "Move focus to the session search field."),
 		),
-		Backspace: key.NewBinding(
-			key.WithKeys("backspace"),
-			key.WithHelp("⌫", "edit"),
+		Backspace: NewBinding(
+			WithKeys("backspace"),
+			WithHelp("⌫", "edit", "Return focus to search and remove the last character."),
 		),
 	}
 }
 
 // Tunnels contains the bindings of the Tunnels screen.
 type Tunnels struct {
-	Up           key.Binding
-	Down         key.Binding
-	Add          key.Binding
-	Remove       key.Binding
-	Refresh      key.Binding
-	Direction    key.Binding
-	Submit       key.Binding
-	FocusPorts   key.Binding
-	FocusSpec    key.Binding
-	SelectPort   key.Binding
-	RefreshPorts key.Binding
-	Backspace    key.Binding
+	Up           Binding
+	Down         Binding
+	Add          Binding
+	Remove       Binding
+	Refresh      Binding
+	Direction    Binding
+	Submit       Binding
+	FocusPorts   Binding
+	FocusSpec    Binding
+	SelectPort   Binding
+	RefreshPorts Binding
+	Backspace    Binding
 }
 
 // DefaultTunnels returns the Tunnels screen bindings.
 func DefaultTunnels() Tunnels {
 	return Tunnels{
-		Up: key.NewBinding(
-			key.WithKeys("up", "k"),
-			key.WithHelp("↑/k", "up"),
+		Up: NewBinding(
+			WithKeys("up", "k"),
+			WithHelp("↑/k", "up", "Move the selection to the previous tunnel."),
 		),
-		Down: key.NewBinding(
-			key.WithKeys("down", "j"),
-			key.WithHelp("↓/j", "down"),
+		Down: NewBinding(
+			WithKeys("down", "j"),
+			WithHelp("↓/j", "down", "Move the selection to the next tunnel."),
 		),
-		Add: key.NewBinding(
-			key.WithKeys("a"),
-			key.WithHelp("a", "add tunnel"),
+		Add: NewBinding(
+			WithKeys("a"),
+			WithHelp("a", "add", "Start adding a tunnel. In the all-sessions view, first choose the session."),
 		),
-		Remove: key.NewBinding(
-			key.WithKeys("x"),
-			key.WithHelp("x", "remove tunnel"),
+		Remove: NewBinding(
+			WithKeys("x"),
+			WithHelp("x", "remove", "Remove the selected tunnel. This stops the forward immediately."),
 		),
-		Refresh: key.NewBinding(
-			key.WithKeys("r"),
-			key.WithHelp("r", "refresh"),
+		Refresh: NewBinding(
+			WithKeys("r"),
+			WithHelp("r", "refresh", "Reload the tunnel list now."),
 		),
-		Direction: key.NewBinding(
-			key.WithKeys("left", "right"),
-			key.WithHelp("←/→", "direction"),
+		Direction: NewBinding(
+			WithKeys("left", "right"),
+			WithHelp("←/→", "direction", "Switch between local and remote forwarding."),
 		),
-		Submit: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "add"),
+		Submit: NewBinding(
+			WithKeys("enter"),
+			WithHelp("enter", "add", "Create the tunnel using the entered specification and selected direction."),
 		),
-		FocusPorts: key.NewBinding(
-			key.WithKeys("tab", "shift+tab"),
-			key.WithHelp("tab", "ports"),
+		FocusPorts: NewBinding(
+			WithKeys("tab", "shift+tab"),
+			WithHelp("tab", "ports", "Move focus to the available listening ports."),
 		),
-		FocusSpec: key.NewBinding(
-			key.WithKeys("tab", "shift+tab"),
-			key.WithHelp("tab", "spec"),
+		FocusSpec: NewBinding(
+			WithKeys("tab", "shift+tab"),
+			WithHelp("tab", "spec", "Move focus back to the tunnel specification."),
 		),
-		SelectPort: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "use"),
+		SelectPort: NewBinding(
+			WithKeys("enter"),
+			WithHelp("enter", "use", "Use the selected listening port in the tunnel specification."),
 		),
-		RefreshPorts: key.NewBinding(
-			key.WithKeys("r"),
-			key.WithHelp("r", "refresh ports"),
+		RefreshPorts: NewBinding(
+			WithKeys("r"),
+			WithHelp("r", "refresh ports", "Reload the listening ports available on the target side."),
 		),
-		Backspace: key.NewBinding(
-			key.WithKeys("backspace"),
-			key.WithHelp("⌫", "spec"),
+		Backspace: NewBinding(
+			WithKeys("backspace"),
+			WithHelp("⌫", "spec", "Return focus to the tunnel specification."),
 		),
 	}
 }
 
 // Commands contains the bindings of the Commands list and its add/edit form.
 type Commands struct {
-	Up            key.Binding
-	Down          key.Binding
-	Navigate      key.Binding
-	SearchUp      key.Binding
-	SearchDown    key.Binding
-	Add           key.Binding
-	Edit          key.Binding
-	Remove        key.Binding
-	AddRemove     key.Binding
-	Toggle        key.Binding
-	Refresh       key.Binding
-	FocusList     key.Binding
-	FocusSearch   key.Binding
-	Search        key.Binding
-	NextField     key.Binding
-	PreviousField key.Binding
-	Save          key.Binding
+	Up            Binding
+	Down          Binding
+	Navigate      Binding
+	SearchUp      Binding
+	SearchDown    Binding
+	Add           Binding
+	Edit          Binding
+	Remove        Binding
+	Toggle        Binding
+	Refresh       Binding
+	FocusList     Binding
+	FocusSearch   Binding
+	Search        Binding
+	NextField     Binding
+	PreviousField Binding
+	Save          Binding
 }
 
 // DefaultCommands returns the Commands screen bindings.
 func DefaultCommands() Commands {
 	return Commands{
-		Up: key.NewBinding(
-			key.WithKeys("up", "k"),
-			key.WithHelp("↑/k", "up"),
+		Up: NewBinding(
+			WithKeys("up", "k"),
+			WithHelp("↑/k", "up", "Move the selection to the previous command."),
 		),
-		Down: key.NewBinding(
-			key.WithKeys("down", "j"),
-			key.WithHelp("↓/j", "down"),
+		Down: NewBinding(
+			WithKeys("down", "j"),
+			WithHelp("↓/j", "down", "Move the selection to the next command."),
 		),
-		// Navigate and AddRemove are the compact footer forms of the list
-		// bindings; the actual handling still uses Up/Down and Add/Remove.
-		Navigate: key.NewBinding(
-			key.WithKeys("up", "k", "down", "j"),
-			key.WithHelp("↑/k/↓/j", "navigate"),
+		// Navigate is the compact footer form of the list bindings; the actual
+		// handling still uses Up/Down.
+		Navigate: NewBinding(
+			WithKeys("up", "k", "down", "j"),
+			WithHelp("↑/k/↓/j", "navigate", "Move through the command list."),
 		),
 		// The search field needs j and k as text, so it only treats the arrow
 		// keys as movement.
-		SearchUp: key.NewBinding(
-			key.WithKeys("up"),
-			key.WithHelp("↑", "up"),
+		SearchUp: NewBinding(
+			WithKeys("up"),
+			WithHelp("↑", "up", "Move the selection to the previous command."),
 		),
-		SearchDown: key.NewBinding(
-			key.WithKeys("down"),
-			key.WithHelp("↓", "down"),
+		SearchDown: NewBinding(
+			WithKeys("down"),
+			WithHelp("↓", "down", "Move the selection to the next command."),
 		),
-		Add: key.NewBinding(
-			key.WithKeys("a"),
-			key.WithHelp("a", "add command"),
+		Add: NewBinding(
+			WithKeys("a"),
+			WithHelp("a", "add", "Open a form to create a command on the origin."),
 		),
-		Edit: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "edit"),
+		Edit: NewBinding(
+			WithKeys("enter"),
+			WithHelp("enter", "edit", "Edit the selected command."),
 		),
-		Remove: key.NewBinding(
-			key.WithKeys("x"),
-			key.WithHelp("x", "remove command"),
+		Remove: NewBinding(
+			WithKeys("x"),
+			WithHelp("x", "remove", "Remove the selected command."),
 		),
-		AddRemove: key.NewBinding(
-			key.WithKeys("a", "x"),
-			key.WithHelp("a/x", "add/remove command"),
+		Toggle: NewBinding(
+			WithKeys("space"),
+			WithHelp("space", "enable/disable", "Toggle whether the selected command can be run."),
 		),
-		Toggle: key.NewBinding(
-			key.WithKeys("space"),
-			key.WithHelp("space", "enable/disable"),
+		Refresh: NewBinding(
+			WithKeys("r"),
+			WithHelp("r", "refresh", "Reload the command list now."),
 		),
-		Refresh: key.NewBinding(
-			key.WithKeys("r"),
-			key.WithHelp("r", "refresh"),
+		FocusList: NewBinding(
+			WithKeys("tab", "shift+tab"),
+			WithHelp("tab", "commands", "Move focus to the command list."),
 		),
-		FocusList: key.NewBinding(
-			key.WithKeys("tab", "shift+tab"),
-			key.WithHelp("tab", "commands"),
+		FocusSearch: NewBinding(
+			WithKeys("tab", "shift+tab"),
+			WithHelp("tab", "search", "Move focus to the command search field."),
 		),
-		FocusSearch: key.NewBinding(
-			key.WithKeys("tab", "shift+tab"),
-			key.WithHelp("tab", "search"),
+		Search: NewBinding(
+			WithKeys("/"),
+			WithHelp("/", "search", "Focus the search field."),
 		),
-		Search: key.NewBinding(
-			key.WithKeys("/"),
-			key.WithHelp("/", "search"),
+		NextField: NewBinding(
+			WithKeys("tab"),
+			WithHelp("tab", "next field", "Move focus to the next form field."),
 		),
-		NextField: key.NewBinding(
-			key.WithKeys("tab"),
-			key.WithHelp("tab", "next field"),
+		PreviousField: NewBinding(
+			WithKeys("shift+tab"),
+			WithHelp("shift+tab", "previous field", "Move focus to the previous form field."),
 		),
-		PreviousField: key.NewBinding(
-			key.WithKeys("shift+tab"),
-			key.WithHelp("shift+tab", "previous field"),
-		),
-		Save: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "save"),
+		Save: NewBinding(
+			WithKeys("enter"),
+			WithHelp("enter", "save", "Validate and save the command."),
 		),
 	}
 }
 
 // Update contains the bindings of the Update screen.
 type Update struct {
-	Check   key.Binding
-	Install key.Binding
-	Dismiss key.Binding
+	Check   Binding
+	Install Binding
+	Dismiss Binding
 }
 
 // DefaultUpdate returns the Update screen bindings.
 func DefaultUpdate() Update {
 	return Update{
-		Check: key.NewBinding(
-			key.WithKeys("enter", "r"),
-			key.WithHelp("enter/r", "check"),
+		Check: NewBinding(
+			WithKeys("enter", "r"),
+			WithHelp("enter/r", "check", "Check online for a newer release."),
 		),
-		Install: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "confirm"),
+		Install: NewBinding(
+			WithKeys("enter"),
+			WithHelp("enter", "confirm", "Install the available update."),
 		),
-		Dismiss: key.NewBinding(
-			key.WithKeys("esc"),
-			key.WithHelp("esc", "dismiss"),
+		Dismiss: NewBinding(
+			WithKeys("esc"),
+			WithHelp("esc", "dismiss", "Dismiss the update prompt."),
 		),
 	}
 }
 
 // Confirm and Cancel are used by confirmation prompts.
-func Confirm() key.Binding {
-	return key.NewBinding(
-		key.WithKeys("enter"),
-		key.WithHelp("enter", "confirm"),
+func Confirm() Binding {
+	return NewBinding(
+		WithKeys("enter"),
+		WithHelp("enter", "confirm", "Confirm the pending action."),
 	)
 }
 
-func Cancel() key.Binding {
-	return key.NewBinding(
-		key.WithKeys("esc"),
-		key.WithHelp("esc", "cancel"),
+func Cancel() Binding {
+	return NewBinding(
+		WithKeys("esc"),
+		WithHelp("esc", "cancel", "Cancel the current action and return to the previous screen."),
 	)
 }
 
 // Back returns the binding used by child screens to return to the previous
 // screen.
-func Back() key.Binding {
-	return key.NewBinding(
-		key.WithKeys("esc"),
-		key.WithHelp("esc", "back"),
+func Back() Binding {
+	return NewBinding(
+		WithKeys("esc"),
+		WithHelp("esc", "back", "Return to the previous screen."),
 	)
 }

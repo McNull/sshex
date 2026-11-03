@@ -8,7 +8,6 @@ import (
 	"errors"
 	"time"
 
-	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
@@ -160,17 +159,22 @@ func (m *Model) Resume() tea.Cmd {
 // Title implements screen.Screen.
 func (m *Model) Title() string { return "Update" }
 
+// HelpText implements screen.HelpProvider.
+func (m *Model) HelpText() string {
+	return "Check for a newer release. Installing replaces the current executable."
+}
+
 // Keys implements screen.Screen.
-func (m *Model) Keys() []key.Binding {
+func (m *Model) Keys() []keys.Binding {
 	switch m.mode {
 	case modePrompt:
-		return []key.Binding{m.keys.Install, m.keys.Dismiss}
+		return []keys.Binding{m.keys.Install, m.keys.Dismiss}
 	case modeInstalling:
 		return nil
 	case modeLoading, modeChecking:
-		return []key.Binding{keys.Back()}
+		return []keys.Binding{keys.Back()}
 	default:
-		return []key.Binding{m.keys.Check, keys.Back()}
+		return []keys.Binding{m.keys.Check, keys.Back()}
 	}
 }
 
@@ -210,9 +214,9 @@ func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 
 	if m.mode == modePrompt {
 		switch {
-		case key.Matches(press, m.keys.Install):
+		case keys.Matches(press, m.keys.Install):
 			return m, m.startInstall()
-		case key.Matches(press, m.keys.Dismiss):
+		case keys.Matches(press, m.keys.Dismiss):
 			m.mode = modeIdle
 			m.statusErr = false
 			m.status = "update dismissed."
@@ -220,14 +224,14 @@ func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 		return m, nil
 	}
 
-	if key.Matches(press, keys.Back()) {
+	if keys.Matches(press, keys.Back()) {
 		return m, screen.Pop()
 	}
 	// A manual check cannot overtake the load that precedes it.
 	if m.mode == modeLoading {
 		return m, nil
 	}
-	if key.Matches(press, m.keys.Check) {
+	if keys.Matches(press, m.keys.Check) {
 		return m, m.startCheck()
 	}
 	return m, nil

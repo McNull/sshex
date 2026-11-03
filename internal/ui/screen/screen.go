@@ -3,8 +3,9 @@
 package screen
 
 import (
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/mcnull/sshex/internal/ui/keys"
 )
 
 // Screen is one page in the UI. The root model composes the chrome (header and
@@ -21,8 +22,8 @@ type Screen interface {
 	// Title is the human-readable screen name, used for diagnostics and future
 	// breadcrumbs.
 	Title() string
-	// Keys lists the bindings shown in the footer help.
-	Keys() []key.Binding
+	// Keys lists the active bindings used by the footer and contextual help.
+	Keys() []keys.Binding
 	// Resize tells the screen how much space it has.
 	Resize(width, height int)
 }
@@ -31,6 +32,17 @@ type Screen interface {
 // the active screen again after a child screen is popped.
 type Resumable interface {
 	Resume() tea.Cmd
+}
+
+// HelpProvider optionally supplies explanatory text for the contextual help
+// overlay. The active screen's Keys remain the source of its hotkey list.
+type HelpProvider interface {
+	HelpText() string
+}
+
+// HelpKeyAvailability lets text-entry screens reserve h for literal input.
+type HelpKeyAvailability interface {
+	CanOpenHelp() bool
 }
 
 // Action is a navigation request emitted by a screen.

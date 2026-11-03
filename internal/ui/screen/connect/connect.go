@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -102,12 +101,18 @@ func (m *Model) Init() tea.Cmd {
 // Title implements screen.Screen.
 func (m *Model) Title() string { return "Connect" }
 
+// HelpText implements screen.HelpProvider.
+func (m *Model) HelpText() string { return "Search SSH hosts or enter a hostname directly to connect." }
+
+// CanOpenHelp implements screen.HelpKeyAvailability.
+func (m *Model) CanOpenHelp() bool { return m.focus != focusSearch }
+
 // Keys implements screen.Screen.
-func (m *Model) Keys() []key.Binding {
+func (m *Model) Keys() []keys.Binding {
 	if m.focus == focusList {
-		return []key.Binding{m.keys.Up, m.keys.Down, m.keys.Select, m.keys.FocusSearch, keys.Back()}
+		return []keys.Binding{m.keys.Up, m.keys.Down, m.keys.Select, m.keys.FocusSearch, keys.Back()}
 	}
-	return []key.Binding{m.keys.Up, m.keys.Down, m.keys.Select, m.keys.FocusList, keys.Back()}
+	return []keys.Binding{m.keys.Up, m.keys.Down, m.keys.Select, m.keys.FocusList, keys.Back()}
 }
 
 // Resize implements screen.Screen.
@@ -146,19 +151,19 @@ func (m *Model) Update(msg tea.Msg) (screen.Screen, tea.Cmd) {
 }
 
 func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
-	if key.Matches(press, keys.Back()) {
+	if keys.Matches(press, keys.Back()) {
 		return m, screen.Pop()
 	}
 
 	if m.focus == focusSearch {
 		switch {
-		case key.Matches(press, m.keys.FocusList):
+		case keys.Matches(press, m.keys.FocusList):
 			return m, m.setFocus(focusList)
-		case key.Matches(press, m.keys.Up):
+		case keys.Matches(press, m.keys.Up):
 			m.move(-1)
-		case key.Matches(press, m.keys.Down):
+		case keys.Matches(press, m.keys.Down):
 			m.move(1)
-		case key.Matches(press, m.keys.Select):
+		case keys.Matches(press, m.keys.Select):
 			target := strings.TrimSpace(m.input.Value())
 			if target == "" {
 				target = m.selectedName()
@@ -179,15 +184,15 @@ func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 	}
 
 	switch {
-	case key.Matches(press, m.keys.FocusSearch):
+	case keys.Matches(press, m.keys.FocusSearch):
 		return m, m.setFocus(focusSearch)
-	case key.Matches(press, m.keys.Backspace):
+	case keys.Matches(press, m.keys.Backspace):
 		return m, m.backspaceSearch()
-	case key.Matches(press, m.keys.Up):
+	case keys.Matches(press, m.keys.Up):
 		m.move(-1)
-	case key.Matches(press, m.keys.Down):
+	case keys.Matches(press, m.keys.Down):
 		m.move(1)
-	case key.Matches(press, m.keys.Select):
+	case keys.Matches(press, m.keys.Select):
 		if target := m.selectedName(); target != "" {
 			return m, m.connect(target)
 		}

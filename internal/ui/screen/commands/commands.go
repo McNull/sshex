@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -143,21 +142,27 @@ func (m *Model) Resume() tea.Cmd {
 // Title implements screen.Screen.
 func (m *Model) Title() string { return "Commands" }
 
+// HelpText implements screen.HelpProvider.
+func (m *Model) HelpText() string { return "Manage commands that can be run on the origin machine." }
+
+// CanOpenHelp implements screen.HelpKeyAvailability.
+func (m *Model) CanOpenHelp() bool { return m.focus != focusSearch }
+
 // Keys implements screen.Screen.
-func (m *Model) Keys() []key.Binding {
+func (m *Model) Keys() []keys.Binding {
 	if m.confirming {
-		return []key.Binding{keys.Confirm(), keys.Cancel()}
+		return []keys.Binding{keys.Confirm(), keys.Cancel()}
 	}
 	if m.focus == focusList {
-		screenKeys := []key.Binding{m.keys.Navigate, m.keys.Search}
+		screenKeys := []keys.Binding{m.keys.Navigate, m.keys.Search}
 		if m.mutationsAvailable() {
-			// Keep the stateful toggle help visible at narrow widths; edit and
-			// refresh follow it.
-			screenKeys = append(screenKeys, m.keys.AddRemove, m.toggleBinding(), m.keys.Edit)
+			// Keep the stateful toggle help visible at narrow widths; the help
+			// overlay contains the remaining screen bindings.
+			screenKeys = append(screenKeys, m.keys.Add, m.keys.Remove, m.toggleBinding(), m.keys.Edit)
 		}
 		return append(screenKeys, m.keys.Refresh, keys.Back())
 	}
-	screenKeys := []key.Binding{m.keys.SearchUp, m.keys.SearchDown}
+	screenKeys := []keys.Binding{m.keys.SearchUp, m.keys.SearchDown}
 	if m.mutationsAvailable() {
 		screenKeys = append(screenKeys, m.keys.Edit)
 	}
@@ -166,7 +171,7 @@ func (m *Model) Keys() []key.Binding {
 
 // toggleBinding names the action space performs for the selected command so
 // the footer reads enable or disable instead of a generic toggle.
-func (m *Model) toggleBinding() key.Binding {
+func (m *Model) toggleBinding() keys.Binding {
 	action := "toggle"
 	if command, ok := m.selectedCommand(); ok {
 		action = "disable"
@@ -174,9 +179,13 @@ func (m *Model) toggleBinding() key.Binding {
 			action = "enable"
 		}
 	}
-	return key.NewBinding(
-		key.WithKeys("space"),
-		key.WithHelp("space", action),
+	longHelp := "Disable the selected command so it cannot be run."
+	if action == "enable" {
+		longHelp = "Enable the selected command so it can be run."
+	}
+	return keys.NewBinding(
+		keys.WithKeys("space"),
+		keys.WithHelp("space", action, longHelp),
 	)
 }
 
@@ -211,9 +220,9 @@ func (m *Model) Update(msg tea.Msg) (screen.Screen, tea.Cmd) {
 func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 	if m.confirming {
 		switch {
-		case key.Matches(press, keys.Confirm()):
+		case keys.Matches(press, keys.Confirm()):
 			return m, m.removeSelected()
-		case key.Matches(press, keys.Cancel()):
+		case keys.Matches(press, keys.Cancel()):
 			m.clearConfirmation()
 			m.status = ""
 			m.statusErr = false
@@ -221,19 +230,19 @@ func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 		return m, nil
 	}
 
-	if key.Matches(press, keys.Back()) {
+	if keys.Matches(press, keys.Back()) {
 		return m, screen.Pop()
 	}
 
 	if m.focus == focusSearch {
 		switch {
-		case key.Matches(press, m.keys.FocusList):
+		case keys.Matches(press, m.keys.FocusList):
 			return m, m.setFocus(focusList)
-		case key.Matches(press, m.keys.SearchUp):
+		case keys.Matches(press, m.keys.SearchUp):
 			m.move(-1)
-		case key.Matches(press, m.keys.SearchDown):
+		case keys.Matches(press, m.keys.SearchDown):
 			m.move(1)
-		case key.Matches(press, m.keys.Edit):
+		case keys.Matches(press, m.keys.Edit):
 			return m.openEdit()
 		}
 
@@ -248,21 +257,21 @@ func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 	}
 
 	switch {
-	case key.Matches(press, m.keys.FocusSearch), key.Matches(press, m.keys.Search):
+	case keys.Matches(press, m.keys.FocusSearch), keys.Matches(press, m.keys.Search):
 		return m, m.setFocus(focusSearch)
-	case key.Matches(press, m.keys.Up):
+	case keys.Matches(press, m.keys.Up):
 		m.move(-1)
-	case key.Matches(press, m.keys.Down):
+	case keys.Matches(press, m.keys.Down):
 		m.move(1)
-	case key.Matches(press, m.keys.Edit):
+	case keys.Matches(press, m.keys.Edit):
 		return m.openEdit()
-	case key.Matches(press, m.keys.Add):
+	case keys.Matches(press, m.keys.Add):
 		return m.openAdd()
-	case key.Matches(press, m.keys.Remove):
+	case keys.Matches(press, m.keys.Remove):
 		m.startRemove()
-	case key.Matches(press, m.keys.Toggle):
+	case keys.Matches(press, m.keys.Toggle):
 		return m, m.toggleSelected()
-	case key.Matches(press, m.keys.Refresh):
+	case keys.Matches(press, m.keys.Refresh):
 		return m, m.load(false)
 	}
 	return m, nil

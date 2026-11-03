@@ -174,8 +174,8 @@ func TestListIsFocusedByDefault(t *testing.T) {
 	hasSearch := false
 	for _, binding := range m.Keys() {
 		switch binding.Help().Key {
-		case "a/x":
-			hasAdd = binding.Help().Desc == "add/remove command"
+		case "a":
+			hasAdd = binding.Help().Desc == "add"
 		case "/":
 			hasSearch = binding.Help().Desc == "search"
 		}
@@ -224,8 +224,11 @@ func TestFooterHelpIsCompactAndStateful(t *testing.T) {
 	if got := commandHelp(m, "↑/k/↓/j"); got != "navigate" {
 		t.Fatalf("navigate help = %q", got)
 	}
-	if got := commandHelp(m, "a/x"); got != "add/remove command" {
-		t.Fatalf("add/remove help = %q", got)
+	if got := commandHelp(m, "a"); got != "add" {
+		t.Fatalf("add help = %q", got)
+	}
+	if got := commandHelp(m, "x"); got != "remove" {
+		t.Fatalf("remove help = %q", got)
 	}
 	if got := commandHelp(m, "space"); got != "disable" {
 		t.Fatalf("toggle help = %q, want disable for an enabled command", got)
@@ -529,7 +532,7 @@ func TestReadOnlyHidesAndIgnoresMutations(t *testing.T) {
 
 	for _, binding := range m.Keys() {
 		switch binding.Help().Key {
-		case "a", "x", "a/x", "space", "enter":
+		case "a", "x", "space", "enter":
 			t.Fatalf("mutation key %q is shown in read-only mode", binding.Help().Key)
 		}
 	}

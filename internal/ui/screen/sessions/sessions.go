@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -172,9 +171,17 @@ func (m *Model) Title() string {
 	return "Sessions"
 }
 
+// HelpText implements screen.HelpProvider.
+func (m *Model) HelpText() string {
+	return "Manage the active sessions."
+}
+
+// CanOpenHelp implements screen.HelpKeyAvailability.
+func (m *Model) CanOpenHelp() bool { return m.focus != focusSearch }
+
 func (m *Model) picker() bool { return m.onSelect != nil }
 
-func (m *Model) openBinding() key.Binding {
+func (m *Model) openBinding() keys.Binding {
 	if m.picker() {
 		return m.keys.Select
 	}
@@ -182,18 +189,18 @@ func (m *Model) openBinding() key.Binding {
 }
 
 // Keys implements screen.Screen.
-func (m *Model) Keys() []key.Binding {
+func (m *Model) Keys() []keys.Binding {
 	if m.confirming {
-		return []key.Binding{keys.Confirm(), keys.Cancel()}
+		return []keys.Binding{keys.Confirm(), keys.Cancel()}
 	}
 	if m.focus == focusList {
-		screenKeys := []key.Binding{m.keys.Up, m.keys.Down, m.openBinding()}
+		screenKeys := []keys.Binding{m.keys.Up, m.keys.Down, m.openBinding()}
 		if !m.picker() {
 			screenKeys = append(screenKeys, m.keys.Close)
 		}
 		return append(screenKeys, m.keys.Refresh, m.keys.FocusSearch, keys.Back())
 	}
-	return []key.Binding{m.keys.SearchUp, m.keys.SearchDown, m.openBinding(), m.keys.FocusList, keys.Back()}
+	return []keys.Binding{m.keys.SearchUp, m.keys.SearchDown, m.openBinding(), m.keys.FocusList, keys.Back()}
 }
 
 // Resize implements screen.Screen.
@@ -225,9 +232,9 @@ func (m *Model) Update(msg tea.Msg) (screen.Screen, tea.Cmd) {
 func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 	if m.confirming {
 		switch {
-		case key.Matches(press, keys.Confirm()):
+		case keys.Matches(press, keys.Confirm()):
 			return m, m.closeSelected()
-		case key.Matches(press, keys.Cancel()):
+		case keys.Matches(press, keys.Cancel()):
 			m.confirming = false
 			m.confirmID = ""
 			m.confirmFor = ""
@@ -237,19 +244,19 @@ func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 		return m, nil
 	}
 
-	if key.Matches(press, keys.Back()) {
+	if keys.Matches(press, keys.Back()) {
 		return m, screen.Pop()
 	}
 
 	if m.focus == focusSearch {
 		switch {
-		case key.Matches(press, m.keys.FocusList):
+		case keys.Matches(press, m.keys.FocusList):
 			return m, m.setFocus(focusList)
-		case key.Matches(press, m.keys.SearchUp):
+		case keys.Matches(press, m.keys.SearchUp):
 			m.move(-1)
-		case key.Matches(press, m.keys.SearchDown):
+		case keys.Matches(press, m.keys.SearchDown):
 			m.move(1)
-		case key.Matches(press, m.openBinding()):
+		case keys.Matches(press, m.openBinding()):
 			return m.openSelected()
 		}
 
@@ -264,21 +271,21 @@ func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 	}
 
 	switch {
-	case key.Matches(press, m.keys.FocusSearch):
+	case keys.Matches(press, m.keys.FocusSearch):
 		return m, m.setFocus(focusSearch)
-	case key.Matches(press, m.keys.Backspace):
+	case keys.Matches(press, m.keys.Backspace):
 		return m, m.backspaceSearch()
-	case key.Matches(press, m.keys.Up):
+	case keys.Matches(press, m.keys.Up):
 		m.move(-1)
-	case key.Matches(press, m.keys.Down):
+	case keys.Matches(press, m.keys.Down):
 		m.move(1)
-	case key.Matches(press, m.openBinding()):
+	case keys.Matches(press, m.openBinding()):
 		return m.openSelected()
-	case key.Matches(press, m.keys.Close):
+	case keys.Matches(press, m.keys.Close):
 		if !m.picker() {
 			m.startClose()
 		}
-	case key.Matches(press, m.keys.Refresh):
+	case keys.Matches(press, m.keys.Refresh):
 		return m, m.load(false)
 	}
 	return m, nil

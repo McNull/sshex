@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/mcnull/sshex/internal/ui/keys"
 	"github.com/mcnull/sshex/internal/ui/screen"
+	"github.com/mcnull/sshex/internal/ui/screen/menu"
 	"github.com/mcnull/sshex/internal/ui/screen/sessions"
 	"github.com/mcnull/sshex/internal/ui/screen/tunnels"
 	updatescreen "github.com/mcnull/sshex/internal/ui/screen/update"
@@ -223,7 +224,7 @@ func (s *resumableStub) Init() tea.Cmd                           { return nil }
 func (s *resumableStub) Update(tea.Msg) (screen.Screen, tea.Cmd) { return s, nil }
 func (s *resumableStub) View() string                            { return "child" }
 func (s *resumableStub) Title() string                           { return "child" }
-func (s *resumableStub) Keys() []key.Binding                     { return nil }
+func (s *resumableStub) Keys() []keys.Binding                    { return nil }
 func (s *resumableStub) Resize(int, int)                         {}
 func (s *resumableStub) Resume() tea.Cmd {
 	s.resumed = true
@@ -294,6 +295,50 @@ func TestModelQuitKeys(t *testing.T) {
 	_, cmd = m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if _, ok := run(t, cmd).(tea.QuitMsg); !ok {
 		t.Fatalf("ctrl+c message = %T, want tea.QuitMsg", run(t, cmd))
+	}
+}
+
+func TestModelHelpOverlayOpensAndClosesWithoutUpdatingScreen(t *testing.T) {
+	m := newTestModel()
+	resize(t, m, 80, 24)
+
+	_, cmd := m.Update(press('h', "h"))
+	if cmd != nil {
+		t.Fatalf("opening help command = %v, want nil", cmd)
+	}
+	if !m.helpOpen {
+		t.Fatal("h did not open help")
+	}
+	view := ansi.Strip(m.View().Content)
+	for _, want := range []string{"Main menu help", "Choose a section", "Press esc to close help"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("help overlay missing %q:\n%s", want, view)
+		}
+	}
+
+	selected := m.stack.Top().(*menu.Model).Selected()
+	m.Update(press(tea.KeyDown, ""))
+	if got := m.stack.Top().(*menu.Model).Selected(); got != selected {
+		t.Fatalf("help key changed underlying selection from %d to %d", selected, got)
+	}
+	m.Update(press(tea.KeyEsc, ""))
+	if m.helpOpen {
+		t.Fatal("esc did not close help")
+	}
+	if !strings.Contains(ansi.Strip(m.View().Content), "h help") {
+		t.Fatal("help close did not restore the normal footer")
+	}
+}
+
+func TestModelDoesNotOpenHelpWhileTyping(t *testing.T) {
+	m := newTestModel()
+	resize(t, m, 80, 24)
+	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	m.Update(run(t, cmd).(screen.ActionMsg))
+
+	m.Update(press('h', "h"))
+	if m.helpOpen {
+		t.Fatal("h opened help while Connect search is focused")
 	}
 }
 

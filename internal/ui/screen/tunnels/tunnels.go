@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"time"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mcnull/sshex/internal/ui/keys"
@@ -121,13 +120,16 @@ func (m *Model) Resume() tea.Cmd {
 // Title implements screen.Screen.
 func (m *Model) Title() string { return "Tunnels" }
 
+// HelpText implements screen.HelpProvider.
+func (m *Model) HelpText() string { return "Manage tunnels between the origin and clients." }
+
 // Keys implements screen.Screen.
-func (m *Model) Keys() []key.Binding {
+func (m *Model) Keys() []keys.Binding {
 	if m.confirming {
-		return []key.Binding{keys.Confirm(), keys.Cancel()}
+		return []keys.Binding{keys.Confirm(), keys.Cancel()}
 	}
 
-	screenKeys := []key.Binding{m.keys.Up, m.keys.Down}
+	screenKeys := []keys.Binding{m.keys.Up, m.keys.Down}
 	if m.mutationsAvailable() {
 		if m.addOpener != nil {
 			screenKeys = append(screenKeys, m.keys.Add)
@@ -165,9 +167,9 @@ func (m *Model) Update(msg tea.Msg) (screen.Screen, tea.Cmd) {
 func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 	if m.confirming {
 		switch {
-		case key.Matches(press, keys.Confirm()):
+		case keys.Matches(press, keys.Confirm()):
 			return m, m.removeSelected()
-		case key.Matches(press, keys.Cancel()):
+		case keys.Matches(press, keys.Cancel()):
 			m.clearConfirmation()
 			m.status = ""
 			m.statusErr = false
@@ -175,24 +177,24 @@ func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 		return m, nil
 	}
 
-	if key.Matches(press, keys.Back()) {
+	if keys.Matches(press, keys.Back()) {
 		return m, screen.Pop()
 	}
 
 	switch {
-	case key.Matches(press, m.keys.Up):
+	case keys.Matches(press, m.keys.Up):
 		m.move(-1)
-	case key.Matches(press, m.keys.Down):
+	case keys.Matches(press, m.keys.Down):
 		m.move(1)
-	case key.Matches(press, m.keys.Add):
+	case keys.Matches(press, m.keys.Add):
 		if m.mutationsAvailable() {
 			return m, m.openAdd()
 		}
-	case key.Matches(press, m.keys.Remove):
+	case keys.Matches(press, m.keys.Remove):
 		if m.mutationsAvailable() {
 			m.startRemove()
 		}
-	case key.Matches(press, m.keys.Refresh):
+	case keys.Matches(press, m.keys.Refresh):
 		return m, m.load(false)
 	}
 	return m, nil

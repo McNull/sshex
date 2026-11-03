@@ -3,8 +3,9 @@ package screen
 import (
 	"testing"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/mcnull/sshex/internal/ui/keys"
 )
 
 type stubScreen struct {
@@ -15,7 +16,7 @@ func (s stubScreen) Init() tea.Cmd                    { return nil }
 func (s stubScreen) Update(tea.Msg) (Screen, tea.Cmd) { return s, nil }
 func (s stubScreen) View() string                     { return s.name }
 func (s stubScreen) Title() string                    { return s.name }
-func (s stubScreen) Keys() []key.Binding              { return nil }
+func (s stubScreen) Keys() []keys.Binding             { return nil }
 func (s stubScreen) Resize(int, int)                  {}
 
 func TestStackPushPop(t *testing.T) {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -105,9 +104,15 @@ func (f *Form) Title() string {
 	return "Edit command"
 }
 
+// HelpText implements screen.HelpProvider.
+func (f *Form) HelpText() string { return "Edit the fields, then save the command." }
+
+// CanOpenHelp implements screen.HelpKeyAvailability.
+func (f *Form) CanOpenHelp() bool { return f.focus == fieldDisabled }
+
 // Keys implements screen.Screen.
-func (f *Form) Keys() []key.Binding {
-	bindings := []key.Binding{f.keys.NextField}
+func (f *Form) Keys() []keys.Binding {
+	bindings := []keys.Binding{f.keys.NextField}
 	if f.focus == fieldDisabled {
 		bindings = append(bindings, f.keys.Toggle)
 	}
@@ -140,15 +145,15 @@ func (f *Form) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 		return f, nil
 	}
 	switch {
-	case key.Matches(press, keys.Cancel()):
+	case keys.Matches(press, keys.Cancel()):
 		return f, screen.Pop()
-	case key.Matches(press, f.keys.Save):
+	case keys.Matches(press, f.keys.Save):
 		return f, f.submit()
-	case key.Matches(press, f.keys.NextField):
+	case keys.Matches(press, f.keys.NextField):
 		return f, f.setFocus((f.focus + 1) % fieldCount)
-	case key.Matches(press, f.keys.PreviousField):
+	case keys.Matches(press, f.keys.PreviousField):
 		return f, f.setFocus((f.focus + fieldCount - 1) % fieldCount)
-	case f.focus == fieldDisabled && key.Matches(press, f.keys.Toggle):
+	case f.focus == fieldDisabled && keys.Matches(press, f.keys.Toggle):
 		f.disabled = !f.disabled
 		f.err = ""
 		return f, nil

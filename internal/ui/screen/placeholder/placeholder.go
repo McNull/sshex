@@ -3,7 +3,6 @@
 package placeholder
 
 import (
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -17,7 +16,7 @@ type Model struct {
 	title       string
 	description string
 	styles      *theme.Styles
-	back        key.Binding
+	back        keys.Binding
 	width       int
 	height      int
 }
@@ -39,7 +38,7 @@ func (m *Model) Init() tea.Cmd { return nil }
 func (m *Model) Title() string { return m.title }
 
 // Keys implements screen.Screen.
-func (m *Model) Keys() []key.Binding { return []key.Binding{m.back} }
+func (m *Model) Keys() []keys.Binding { return []keys.Binding{m.back} }
 
 // Resize implements screen.Screen.
 func (m *Model) Resize(width, height int) {
@@ -53,7 +52,7 @@ func (m *Model) Update(msg tea.Msg) (screen.Screen, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	if key.Matches(press, m.back) {
+	if keys.Matches(press, m.back) {
 		return m, screen.Pop()
 	}
 	return m, nil

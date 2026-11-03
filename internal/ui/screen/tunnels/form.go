@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -107,15 +106,23 @@ func (f *AddForm) Init() tea.Cmd {
 // Title implements screen.Screen.
 func (f *AddForm) Title() string { return "Add tunnel" }
 
+// HelpText implements screen.HelpProvider.
+func (f *AddForm) HelpText() string {
+	return "Enter port[:target[:remote-port]] and choose the forwarding direction."
+}
+
+// CanOpenHelp implements screen.HelpKeyAvailability.
+func (f *AddForm) CanOpenHelp() bool { return f.focus == focusPorts }
+
 // Keys implements screen.Screen.
-func (f *AddForm) Keys() []key.Binding {
+func (f *AddForm) Keys() []keys.Binding {
 	if f.focus == focusPorts {
-		return []key.Binding{
+		return []keys.Binding{
 			f.keys.Up, f.keys.Down, f.keys.SelectPort, f.keys.Direction,
 			f.keys.FocusSpec, f.keys.RefreshPorts, keys.Cancel(),
 		}
 	}
-	bindings := []key.Binding{f.keys.Submit, f.keys.Direction}
+	bindings := []keys.Binding{f.keys.Submit, f.keys.Direction}
 	if f.portSource != nil {
 		bindings = append(bindings, f.keys.FocusPorts)
 	}
@@ -150,33 +157,33 @@ func (f *AddForm) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 	if f.submitting {
 		return f, nil
 	}
-	if key.Matches(press, keys.Cancel()) {
+	if keys.Matches(press, keys.Cancel()) {
 		return f, screen.Pop()
 	}
-	if f.portSource != nil && (key.Matches(press, f.keys.FocusPorts) || key.Matches(press, f.keys.FocusSpec)) {
+	if f.portSource != nil && (keys.Matches(press, f.keys.FocusPorts) || keys.Matches(press, f.keys.FocusSpec)) {
 		return f, f.toggleFocus()
 	}
-	if key.Matches(press, f.keys.Direction) {
+	if keys.Matches(press, f.keys.Direction) {
 		f.ToggleDirection()
 		return f, f.loadPorts(true)
 	}
 	if f.focus == focusPorts {
 		switch {
-		case key.Matches(press, f.keys.Up):
+		case keys.Matches(press, f.keys.Up):
 			f.movePort(-1)
-		case key.Matches(press, f.keys.Down):
+		case keys.Matches(press, f.keys.Down):
 			f.movePort(1)
-		case key.Matches(press, f.keys.SelectPort):
+		case keys.Matches(press, f.keys.SelectPort):
 			return f, f.selectPort()
-		case key.Matches(press, f.keys.RefreshPorts):
+		case keys.Matches(press, f.keys.RefreshPorts):
 			return f, f.loadPorts(false)
-		case key.Matches(press, f.keys.Backspace):
+		case keys.Matches(press, f.keys.Backspace):
 			f.focus = focusSpec
 			return f, f.input.Focus()
 		}
 		return f, nil
 	}
-	if key.Matches(press, f.keys.Submit) {
+	if keys.Matches(press, f.keys.Submit) {
 		return f, f.submit()
 	}
 	return f, f.update(press)

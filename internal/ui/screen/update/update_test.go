@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/mcnull/sshex/internal/ui/keys"
 	"github.com/mcnull/sshex/internal/ui/screen"
 	"github.com/mcnull/sshex/internal/ui/theme"
 )
@@ -448,7 +448,7 @@ func TestVersionLabels(t *testing.T) {
 	}
 }
 
-func hasHelp(bindings []key.Binding, keys, desc string) bool {
+func hasHelp(bindings []keys.Binding, keys, desc string) bool {
 	for _, binding := range bindings {
 		if binding.Help().Key == keys && binding.Help().Desc == desc {
 			return true
@@ -457,7 +457,7 @@ func hasHelp(bindings []key.Binding, keys, desc string) bool {
 	return false
 }
 
-func helpKeys(bindings []key.Binding) []string {
+func helpKeys(bindings []keys.Binding) []string {
 	out := make([]string, 0, len(bindings))
 	for _, binding := range bindings {
 		out = append(out, binding.Help().Key+" "+binding.Help().Desc)

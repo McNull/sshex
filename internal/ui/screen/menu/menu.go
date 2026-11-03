@@ -4,7 +4,6 @@ package menu
 import (
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -57,9 +56,12 @@ func (m *Model) Init() tea.Cmd { return nil }
 // Title implements screen.Screen.
 func (m *Model) Title() string { return "Main menu" }
 
+// HelpText implements screen.HelpProvider.
+func (m *Model) HelpText() string { return "Choose a section to manage SSH connections and settings." }
+
 // Keys implements screen.Screen.
-func (m *Model) Keys() []key.Binding {
-	return []key.Binding{m.keys.Up, m.keys.Down, m.keys.Select, m.keys.Quit}
+func (m *Model) Keys() []keys.Binding {
+	return []keys.Binding{m.keys.Up, m.keys.Down, m.keys.Select, m.keys.Quit}
 }
 
 // Resize implements screen.Screen.
@@ -79,13 +81,13 @@ func (m *Model) Update(msg tea.Msg) (screen.Screen, tea.Cmd) {
 	}
 
 	switch {
-	case key.Matches(press, m.keys.Quit):
+	case keys.Matches(press, m.keys.Quit):
 		return m, screen.Quit()
-	case key.Matches(press, m.keys.Up):
+	case keys.Matches(press, m.keys.Up):
 		m.selected = (m.selected - 1 + len(m.items)) % len(m.items)
-	case key.Matches(press, m.keys.Down):
+	case keys.Matches(press, m.keys.Down):
 		m.selected = (m.selected + 1) % len(m.items)
-	case key.Matches(press, m.keys.Select):
+	case keys.Matches(press, m.keys.Select):
 		if len(m.items) == 0 {
 			return m, nil
 		}
