@@ -1,6 +1,7 @@
 package openssh
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -109,6 +110,69 @@ func TestShellQuote(t *testing.T) {
 		if got := shellQuote(tc.in); got != tc.want {
 			t.Fatalf("shellQuote(%q) = %q; want %q", tc.in, got, tc.want)
 		}
+	}
+}
+
+func TestSharedConnectionWriterRewritesMessage(t *testing.T) {
+	var out bytes.Buffer
+	w := newSharedConnectionWriter(&out, "null@b0b")
+
+	_, err := w.Write([]byte("warning: banner\r\nShared connection to nulls-probe.dot.nullest.com closed.\r\n"))
+	if err != nil {
+		t.Fatalf("Write() error: %v", err)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatalf("Flush() error: %v", err)
+	}
+
+	want := "warning: banner\r\nsshex: shared connection to null@b0b closed.\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q; want %q", got, want)
+	}
+}
+
+func TestSharedConnectionWriterRewritesSplitMessage(t *testing.T) {
+	var out bytes.Buffer
+	w := newSharedConnectionWriter(&out, "b0b")
+
+	for _, part := range []string{"Shared conn", "ection to nulls-probe.dot.nullest.com", " closed.\r\n"} {
+		if _, err := w.Write([]byte(part)); err != nil {
+			t.Fatalf("Write(%q) error: %v", part, err)
+		}
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatalf("Flush() error: %v", err)
+	}
+
+	want := "sshex: shared connection to b0b closed.\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q; want %q", got, want)
+	}
+}
+
+func TestSharedConnectionWriterFlushesPartialLine(t *testing.T) {
+	var out bytes.Buffer
+	w := newSharedConnectionWriter(&out, "b0b")
+
+	if _, err := w.Write([]byte("incomplete")); err != nil {
+		t.Fatalf("Write() error: %v", err)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatalf("Flush() error: %v", err)
+	}
+
+	if got, want := out.String(), "incomplete"; got != want {
+		t.Fatalf("output = %q; want %q", got, want)
+	}
+}
+
+func TestSharedConnectionWriterDiscardsNilOutput(t *testing.T) {
+	w := newSharedConnectionWriter(nil, "b0b")
+	if _, err := w.Write([]byte("Shared connection to host closed.\r\n")); err != nil {
+		t.Fatalf("Write() error: %v", err)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatalf("Flush() error: %v", err)
 	}
 }
 

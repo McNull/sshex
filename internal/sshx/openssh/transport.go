@@ -163,11 +163,15 @@ func (c *connection) Shell(ctx context.Context, stdin io.Reader, stdout, stderr 
 	cmd := exec.CommandContext(ctx, c.sshPath, args...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	if err := cmd.Run(); err != nil {
+	stderrFilter := newSharedConnectionWriter(stderr, c.target.String())
+	cmd.Stderr = stderrFilter
+
+	err := cmd.Run()
+	flushErr := stderrFilter.Flush()
+	if err != nil {
 		return fmt.Errorf("ssh session: %w", err)
 	}
-	return nil
+	return flushErr
 }
 
 // shellCommand returns a remote command that exports SSHEX_SESSION for the
