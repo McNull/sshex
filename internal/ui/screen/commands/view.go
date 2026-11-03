@@ -31,10 +31,11 @@ func (m *Model) View() string {
 
 func (m *Model) headerView() string {
 	inner := max(m.width-2, 0)
-	left := "  NAME"
-	right := "STATE"
-	gap := max(inner-lipgloss.Width(left)-lipgloss.Width(right), 1)
-	line := left + strings.Repeat(" ", gap) + right
+	layout := newListLayout(inner)
+	line := "  " +
+		padRight(truncate("NAME", layout.name), layout.name) + "  " +
+		padRight(truncate("ALIAS", layout.alias), layout.alias) + "  " +
+		padLeft(truncate("STATE", layout.state), layout.state)
 	return m.styles.ListHeader.Padding(0, 1).Width(m.width).Render(padRight(line, inner))
 }
 
@@ -56,20 +57,20 @@ func (m *Model) listView() []string {
 		return []string{m.styles.ScreenHint.Render("no matching commands")}
 	}
 
-	lines := make([]string, 0, rows*2)
+	lines := make([]string, 0, rows)
 	for i := 0; i < rows; i++ {
 		index := m.offset + i
 		if index >= len(m.filtered) {
 			break
 		}
-		first, second := m.row(m.filtered[index], index == m.selected)
-		lines = append(lines, first, second)
+		lines = append(lines, m.row(m.filtered[index], index == m.selected))
 	}
 	return lines
 }
 
-func (m *Model) row(command Command, selected bool) (string, string) {
+func (m *Model) row(command Command, selected bool) string {
 	inner := max(m.width-2, 0)
+	layout := newListLayout(inner)
 	marker := " "
 	if selected {
 		marker = "›"
@@ -82,28 +83,55 @@ func (m *Model) row(command Command, selected bool) (string, string) {
 		stateStyle = m.styles.Warning
 	}
 
-	leftText := command.Name
-	if command.Alias != "" {
-		leftText += " · alias " + command.Alias
-	}
-	leftWidth := max(inner-lipgloss.Width(state)-3, 1)
-	leftText = truncate(leftText, leftWidth)
-	left := marker + " " + leftText
-	gap := max(inner-lipgloss.Width(left)-lipgloss.Width(state), 1)
-	first := left + strings.Repeat(" ", gap) + state
-	second := "  " + command.Template
+	name := padRight(truncate(command.Name, layout.name), layout.name)
+	alias := padRight(truncate(command.Alias, layout.alias), layout.alias)
+	state = padLeft(truncate(state, layout.state), layout.state)
+	line := marker + " " + name + "  " + alias + "  " + state
 
 	if selected {
 		style := m.styles.ListRowSelected.Padding(0, 1).Width(m.width)
-		return style.Render(padRight(truncate(first, inner), inner)),
-			style.Render(padRight(truncate(second, inner), inner))
+		return style.Render(padRight(truncate(line, inner), inner))
 	}
 
-	first = m.styles.ListMarker.Render(marker) + " " + m.styles.ListRow.Render(leftText) +
-		strings.Repeat(" ", gap) + stateStyle.Render(state)
+	line = m.styles.ListMarker.Render(marker) + " " + m.styles.ListRow.Render(name) +
+		"  " + m.styles.ListDescription.Render(alias) + "  " + stateStyle.Render(state)
 	rowStyle := m.styles.ListRow.Padding(0, 1).Width(m.width)
-	return rowStyle.Render(padRight(truncate(first, inner), inner)),
-		rowStyle.Render(m.styles.ListDescription.Render(padRight(truncate(second, inner), inner)))
+	return rowStyle.Render(padRight(truncate(line, inner), inner))
+}
+
+// listLayout describes the fixed-width cells of the command list. The name
+// column takes the remaining space after the alias and state columns.
+type listLayout struct {
+	name  int
+	alias int
+	state int
+}
+
+func newListLayout(inner int) listLayout {
+	const (
+		prefixWidth    = 2
+		columnGap      = 2
+		stateWidth     = 8
+		preferredAlias = 16
+		minNameWidth   = 8
+	)
+
+	content := max(inner-prefixWidth-2*columnGap, 0)
+	state := min(stateWidth, content)
+	remaining := content - state
+	alias := min(preferredAlias, max(remaining-minNameWidth, 0))
+	return listLayout{name: remaining - alias, alias: alias, state: state}
+}
+
+func padLeft(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	s = truncate(s, width)
+	if lipgloss.Width(s) >= width {
+		return s
+	}
+	return strings.Repeat(" ", width-lipgloss.Width(s)) + s
 }
 
 func (m *Model) statusView() string {

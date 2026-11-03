@@ -246,14 +246,17 @@ func TestLoadsAndRendersCommands(t *testing.T) {
 
 	view := ansi.Strip(m.View())
 	for _, want := range []string{
-		"NAME", "STATE",
-		"code", "git-status", "alias code", "alias gs",
-		"code --folder-uri", "git status --short",
-		"enabled", "disabled",
+		"NAME", "ALIAS", "STATE",
+		"code", "git-status", "gs", "enabled", "disabled",
 		"2 commands",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view is missing %q:\n%s", want, view)
+		}
+	}
+	for _, unwanted := range []string{"code --folder-uri", "git status --short", "alias "} {
+		if strings.Contains(view, unwanted) {
+			t.Fatalf("view should not contain %q:\n%s", unwanted, view)
 		}
 	}
 }
@@ -386,7 +389,7 @@ func TestRefreshErrorKeepsExistingRows(t *testing.T) {
 	load(t, m)
 
 	view := ansi.Strip(m.View())
-	if !strings.Contains(view, "code --folder-uri") {
+	if !strings.Contains(view, "git-status") {
 		t.Fatal("existing commands disappeared after a refresh error")
 	}
 	if !strings.Contains(view, "could not refresh commands: boom") {
@@ -407,7 +410,7 @@ func TestTickRefreshesSilently(t *testing.T) {
 	if source.calls != 1 {
 		t.Fatalf("source listed %d times, want 1", source.calls)
 	}
-	if !strings.Contains(ansi.Strip(m.View()), "code --folder-uri") {
+	if !strings.Contains(ansi.Strip(m.View()), "git-status") {
 		t.Fatal("list disappeared during a background refresh")
 	}
 }
@@ -436,7 +439,7 @@ func TestInitRecoversFromLostLoad(t *testing.T) {
 	m.load(false)
 
 	m.Update(firstBatch(t, m.Init()))
-	if !strings.Contains(ansi.Strip(m.View()), "code --folder-uri") {
+	if !strings.Contains(ansi.Strip(m.View()), "git-status") {
 		t.Fatalf("re-entering the screen did not reload the list:\n%s", m.View())
 	}
 }
@@ -689,7 +692,7 @@ func TestMoveAndScrollTracksSelection(t *testing.T) {
 		items[i] = Command{Name: fmt.Sprintf("c%02d", i), Template: "true"}
 	}
 	m := newScreen(editableSource(items...), &fakeController{})
-	m.Resize(60, 10)
+	m.Resize(60, 6)
 	load(t, m)
 	listFocus(m)
 

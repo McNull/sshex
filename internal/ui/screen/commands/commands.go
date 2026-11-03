@@ -587,10 +587,10 @@ func (m *Model) commandsCopy() []Command {
 	return append([]Command(nil), m.commands...)
 }
 
-// commandRows returns the number of two-line rows that fit in the content
-// area. The search field, header and status line each take one row.
+// commandRows returns the number of rows that fit in the content area. The
+// search field, header and status line each take one row.
 func (m *Model) commandRows() int {
-	return max((m.height-3)/2, 0)
+	return max(m.height-3, 0)
 }
 
 func (m *Model) clampOffset() {
