@@ -5,6 +5,7 @@ package connect
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -20,6 +21,12 @@ import (
 const (
 	focusSearch = iota
 	focusList
+)
+
+const (
+	focusedSearchPrompt   = " > search "
+	unfocusedSearchPrompt = "   search "
+	portColumnWidth       = 5
 )
 
 // HostSource resolves the hosts shown by the screen.
@@ -67,7 +74,7 @@ type hostsLoadedMsg struct {
 // New returns a Connect screen.
 func New(opts Options) *Model {
 	input := textinput.New()
-	input.Prompt = "search › "
+	input.Prompt = focusedSearchPrompt
 	input.Placeholder = "host, user@host or part of a name"
 	input.SetStyles(inputStyles(opts.Styles))
 	input.Focus()
@@ -282,9 +289,9 @@ func (m *Model) selectedName() string {
 }
 
 func (m *Model) listRows() int {
-	// One row for the search field, one for the sticky header and one for the
-	// status line.
-	return max(m.height-3, 0)
+	// Blank rows above and below the search field, the search field itself,
+	// the sticky header and the status line.
+	return max(m.height-5, 0)
 }
 
 func (m *Model) clampOffset() {
@@ -315,7 +322,9 @@ func (m *Model) View() string {
 	}
 
 	lines := make([]string, 0, m.height)
+	lines = append(lines, "")
 	lines = append(lines, m.searchView())
+	lines = append(lines, "")
 	lines = append(lines, m.headerView())
 	lines = append(lines, m.listView()...)
 
@@ -331,14 +340,23 @@ func (m *Model) View() string {
 }
 
 func (m *Model) searchView() string {
+	m.input.Prompt = m.searchPrompt()
 	m.input.SetStyles(inputStyles(m.styles))
 	return m.input.View()
 }
 
+func (m *Model) searchPrompt() string {
+	if m.focus == focusSearch {
+		return focusedSearchPrompt
+	}
+	return unfocusedSearchPrompt
+}
+
 func (m *Model) headerView() string {
 	nameWidth := m.nameWidth()
-	descWidth := max(m.width-nameWidth-6, 0)
+	descWidth := m.descriptionWidth(nameWidth)
 	line := "  " + padRight(truncate("HOST", nameWidth), nameWidth) +
+		"  " + padRight("PORT", portColumnWidth) +
 		"  " + padRight(truncate("HOSTNAME", descWidth), descWidth)
 	return m.styles.ListHeader.Padding(0, 1).Width(m.width).Render(padRight(line, m.width-2))
 }
@@ -384,18 +402,31 @@ func (m *Model) hostRow(host sshhosts.Host, selected bool, nameWidth int) string
 		marker = "›"
 	}
 	name := padRight(truncate(host.Name, nameWidth), nameWidth)
-	descWidth := max(m.width-nameWidth-6, 0)
+	port := padRight(truncate(displayPort(host), portColumnWidth), portColumnWidth)
+	descWidth := m.descriptionWidth(nameWidth)
 	desc := padRight(truncate(displayDescription(host), descWidth), descWidth)
 
 	if selected {
-		line := padRight(marker+" "+name+"  "+desc, m.width-2)
+		line := padRight(marker+" "+name+"  "+port+"  "+desc, m.width-2)
 		return m.selectedRowStyle().Padding(0, 1).Width(m.width).Render(line)
 	}
 
 	line := m.styles.ListMarker.Render(marker) + " " +
 		m.styles.ListRow.Render(name) + "  " +
+		m.styles.ListRow.Render(port) + "  " +
 		m.styles.ListDescription.Render(desc)
 	return m.styles.ListRow.Padding(0, 1).Width(m.width).Render(padRight(line, m.width-2))
+}
+
+func (m *Model) descriptionWidth(nameWidth int) int {
+	return max(m.width-nameWidth-portColumnWidth-8, 0)
+}
+
+func displayPort(host sshhosts.Host) string {
+	if host.Port == 0 {
+		return "22"
+	}
+	return strconv.Itoa(host.Port)
 }
 
 // displayDescription hides the HostName column when it repeats the host name.
@@ -417,20 +448,13 @@ func (m *Model) selectedRowStyle() lipgloss.Style {
 }
 
 func (m *Model) statusView() string {
-	if m.status != "" {
-		if m.statusErr {
-			return m.styles.Error.Render(m.status)
-		}
-		return m.styles.ScreenHint.Render(m.status)
-	}
-	if m.loading {
+	if m.status == "" {
 		return ""
 	}
-	if m.loadErr != nil {
-		return ""
+	if m.statusErr {
+		return m.styles.Error.Render(m.status)
 	}
-	count := fmt.Sprintf("%d of %d hosts", len(m.filtered), len(m.hosts))
-	return m.styles.ScreenHint.Render(count)
+	return m.styles.ScreenHint.Render(m.status)
 }
 
 // FinishedMsg reports that a session started from the screen has ended. The
@@ -448,6 +472,7 @@ func inputStyles(styles *theme.Styles) textinput.Styles {
 		Prompt:      styles.InputPrompt,
 	}
 	s.Blurred = s.Focused
+	s.Blurred.Prompt = styles.Muted
 	s.Cursor = textinput.CursorStyle{
 		Color: styles.Cursor.GetForeground(),
 		Shape: tea.CursorBlock,

@@ -68,6 +68,8 @@ func TestModelRendersFullWindow(t *testing.T) {
 	}
 	if header := ansi.Strip(lines[0]); !strings.Contains(header, "sshex: v1.2.3") {
 		t.Fatalf("header = %q, want wordmark with version", header)
+	} else if !strings.Contains(header, "Server menu") {
+		t.Fatalf("header = %q, want screen title", header)
 	}
 	if !strings.Contains(content, "┌──────┐") {
 		t.Fatal("menu logo is missing")
@@ -468,7 +470,7 @@ func TestConnectStateSurvivesMenuRoundTrip(t *testing.T) {
 	if m.stack.Top() != first {
 		t.Fatal("connect screen was recreated instead of restored")
 	}
-	if !strings.Contains(ansi.Strip(m.View().Content), "search › we") {
+	if !strings.Contains(ansi.Strip(m.View().Content), "> search we") {
 		t.Fatal("connect search input was not restored")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -12,6 +13,7 @@ const maxIncludeDepth = 16
 type Host struct {
 	Name        string
 	Description string
+	Port        int
 }
 
 type Options struct {
@@ -162,6 +164,15 @@ func parseConfig(content string) parsedConfig {
 					}
 				}
 			}
+		case "port":
+			port, err := strconv.Atoi(strings.TrimSpace(value))
+			if start >= 0 && err == nil && port > 0 {
+				for i := start; i < end; i++ {
+					if cfg.Aliases[i].Port == 0 {
+						cfg.Aliases[i].Port = port
+					}
+				}
+			}
 		case "include":
 			cfg.Includes = append(cfg.Includes, splitFields(value)...)
 		case "globalknownhostsfile":
@@ -205,26 +216,33 @@ func parseKnownHosts(files []string, home string) []Host {
 				continue
 			}
 			for _, host := range strings.Split(hostList, ",") {
-				host = normalizeKnownHost(host)
-				if host == "" || strings.ContainsAny(host, "*?") {
+				name, port := splitKnownHost(host)
+				if name == "" || strings.ContainsAny(name, "*?") {
 					continue
 				}
-				hosts = append(hosts, Host{Name: host})
+				hosts = append(hosts, Host{Name: name, Port: port})
 			}
 		}
 	}
 	return hosts
 }
 
-func normalizeKnownHost(host string) string {
+func splitKnownHost(host string) (string, int) {
 	if !strings.HasPrefix(host, "[") {
-		return host
+		return host, 0
 	}
 	end := strings.Index(host, "]")
 	if end < 0 {
-		return host
+		return host, 0
 	}
-	return host[1:end]
+	name := host[1:end]
+	port := 0
+	if rest := host[end+1:]; strings.HasPrefix(rest, ":") {
+		if parsed, err := strconv.Atoi(rest[1:]); err == nil && parsed > 0 {
+			port = parsed
+		}
+	}
+	return name, port
 }
 
 func parseHostsFiles(files []string, home string) []Host {
@@ -259,6 +277,9 @@ func dedupSort(hosts []Host) []Host {
 		if i, ok := index[host.Name]; ok {
 			if out[i].Description == "" {
 				out[i].Description = host.Description
+			}
+			if out[i].Port == 0 {
+				out[i].Port = host.Port
 			}
 			continue
 		}

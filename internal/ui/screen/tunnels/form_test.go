@@ -102,15 +102,15 @@ func TestAddFormShowsSessionAndDirection(t *testing.T) {
 	form := newFormScreen(&fakeController{})
 
 	view := ansi.Strip(form.View())
-	if !strings.Contains(view, "Add tunnel · bob@ssh01 · local") {
-		t.Fatalf("form header is missing the session or direction:\n%s", view)
+	if !strings.Contains(view, "bob@ssh01 · local") {
+		t.Fatalf("form context is missing the session or direction:\n%s", view)
 	}
 
 	form.Update(press(tea.KeyRight, ""))
 	if form.direction != DirectionRemote {
 		t.Fatalf("direction = %q, want remote", form.direction)
 	}
-	if view := ansi.Strip(form.View()); !strings.Contains(view, "Add tunnel · bob@ssh01 · remote") {
+	if view := ansi.Strip(form.View()); !strings.Contains(view, "bob@ssh01 · remote") {
 		t.Fatalf("remote direction is not shown:\n%s", view)
 	}
 

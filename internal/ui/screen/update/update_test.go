@@ -387,7 +387,7 @@ func TestStaleResultIsDiscarded(t *testing.T) {
 func TestFirstFrameShowsLoading(t *testing.T) {
 	m, _, _, _ := newTestScreen(t)
 	view := ansi.Strip(m.View())
-	if !strings.Contains(view, "Update") || !strings.Contains(view, "reading cached update state") {
+	if !strings.Contains(view, "reading cached update state") {
 		t.Fatalf("loading frame is missing:\n%s", view)
 	}
 }

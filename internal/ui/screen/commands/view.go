@@ -13,9 +13,10 @@ func (m *Model) View() string {
 		return ""
 	}
 
+	m.input.Prompt = m.searchPrompt()
 	m.input.SetStyles(inputStyles(m.styles))
 	lines := make([]string, 0, m.height)
-	lines = append(lines, m.input.View(), m.headerView())
+	lines = append(lines, "", m.input.View(), "", m.headerView())
 	lines = append(lines, m.listView()...)
 
 	for len(lines) < m.height-1 {
@@ -27,6 +28,13 @@ func (m *Model) View() string {
 		lines[i] = padRight(lines[i], m.width)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (m *Model) searchPrompt() string {
+	if m.focus == focusSearch {
+		return focusedSearchPrompt
+	}
+	return unfocusedSearchPrompt
 }
 
 func (m *Model) headerView() string {
@@ -151,20 +159,8 @@ func (m *Model) statusView() string {
 	if m.loading || m.loadErr != nil {
 		return ""
 	}
-
-	parts := make([]string, 0, 2)
 	if !m.editable {
-		parts = append(parts, "read-only · commands are managed on the origin")
+		return m.styles.ScreenHint.Render("read-only · commands are managed on the origin")
 	}
-	if len(m.commands) > 0 {
-		message := fmt.Sprintf("%d %s", len(m.commands), plural(len(m.commands), "command", "commands"))
-		if strings.TrimSpace(m.query) != "" {
-			message = fmt.Sprintf("%d of %d commands", len(m.filtered), len(m.commands))
-		}
-		parts = append(parts, message)
-	}
-	if len(parts) == 0 {
-		return ""
-	}
-	return m.styles.ScreenHint.Render(truncate(strings.Join(parts, " · "), m.width))
+	return ""
 }

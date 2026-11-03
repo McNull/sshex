@@ -14,7 +14,7 @@ func (m *Model) View() string {
 		return ""
 	}
 
-	lines := []string{m.styles.ScreenTitle.Render("Update"), ""}
+	lines := []string{""}
 	lines = append(lines, m.facts()...)
 	lines = append(lines, "")
 	lines = append(lines, m.outcome()...)
@@ -30,6 +30,8 @@ func (m *Model) View() string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+const contentIndent = "  "
 
 type fact struct {
 	label string
@@ -50,12 +52,12 @@ func (m *Model) facts() []string {
 	}
 
 	const labelWidth = 11
-	valueWidth := max(m.width-2-labelWidth-2, 1)
+	valueWidth := max(m.width-len(contentIndent)-labelWidth-2, 1)
 	lines := make([]string, 0, len(rows))
 	for _, row := range rows {
 		label := m.styles.ScreenSubtitle.Render(padRight(row.label, labelWidth))
 		value := m.styles.ScreenBody.Render(truncate(row.value, valueWidth))
-		lines = append(lines, "  "+label+"  "+value)
+		lines = append(lines, contentIndent+label+"  "+value)
 	}
 	return lines
 }
@@ -63,7 +65,7 @@ func (m *Model) facts() []string {
 func (m *Model) outcome() []string {
 	switch m.mode {
 	case modeLoading:
-		return []string{m.styles.ScreenHint.Render("reading cached update state…")}
+		return []string{contentIndent + m.styles.ScreenHint.Render(truncate("reading cached update state…", m.contentWidth()))}
 	case modeChecking:
 		return []string{m.busyView("checking for updates…")}
 	case modeInstalling:
@@ -77,19 +79,24 @@ func (m *Model) outcome() []string {
 	}
 	if m.status != "" {
 		if m.statusErr {
-			return []string{m.styles.Error.Render(truncate(m.status, m.width))}
+			return []string{contentIndent + m.styles.Error.Render(truncate(m.status, m.contentWidth()))}
 		}
-		return []string{m.styles.ScreenHint.Render(truncate(m.status, m.width))}
+		return []string{contentIndent + m.styles.ScreenHint.Render(truncate(m.status, m.contentWidth()))}
 	}
 	return nil
+}
+
+// contentWidth is the width available after the left indentation.
+func (m *Model) contentWidth() int {
+	return max(m.width-len(contentIndent), 1)
 }
 
 // busyView renders the spinner and its label without truncating the styled
 // spinner frame.
 func (m *Model) busyView(label string) string {
 	frame := m.spinner.View()
-	width := max(m.width-lipgloss.Width(frame)-1, 1)
-	return frame + " " + m.styles.ScreenHint.Render(truncate(label, width))
+	width := max(m.width-len(contentIndent)-lipgloss.Width(frame)-1, 1)
+	return contentIndent + frame + " " + m.styles.ScreenHint.Render(truncate(label, width))
 }
 
 func (m *Model) promptView() []string {
@@ -98,13 +105,14 @@ func (m *Model) promptView() []string {
 		versionLabel(m.currentVersion),
 		versionLabel(m.availableVersion),
 	)
+	width := m.contentWidth()
 	return []string{
-		m.styles.Warning.Render(truncate(headline, m.width)),
-		m.styles.ScreenBody.Render(truncate(
+		contentIndent + m.styles.Warning.Render(truncate(headline, width)),
+		contentIndent + m.styles.ScreenBody.Render(truncate(
 			"The sshex executable will be replaced. Restart sshex to use the new version.",
-			m.width,
+			width,
 		)),
-		m.styles.ScreenHint.Render(truncate("enter confirm · esc dismiss", m.width)),
+		contentIndent + m.styles.ScreenHint.Render(truncate("enter confirm · esc dismiss", width)),
 	}
 }
 

@@ -127,6 +127,7 @@ type Styles struct {
 	BrandAccent            lipgloss.Style
 	HeaderLabel            lipgloss.Style
 	HeaderIdentity         lipgloss.Style
+	HeaderTitle            lipgloss.Style
 	Version                lipgloss.Style
 	Rule                   lipgloss.Style
 	FooterKey              lipgloss.Style
@@ -171,6 +172,7 @@ func NewStyles(t Theme) Styles {
 		BrandAccent:     lipgloss.NewStyle().Bold(true).Foreground(t.Tokens.Accent),
 		HeaderLabel:     lipgloss.NewStyle().Foreground(t.Tokens.Muted),
 		HeaderIdentity:  lipgloss.NewStyle().Foreground(t.Tokens.Accent).Bold(true),
+		HeaderTitle:     lipgloss.NewStyle().Foreground(t.Tokens.Foreground).Bold(true),
 		Version:         lipgloss.NewStyle().Foreground(t.Tokens.Muted),
 		Rule:            lipgloss.NewStyle().Foreground(t.Tokens.Border),
 		FooterKey:       lipgloss.NewStyle().Foreground(t.Tokens.Foreground).Bold(true),
@@ -219,6 +221,7 @@ func noColorStyles() Styles {
 		BrandAccent:     lipgloss.NewStyle().Bold(true),
 		HeaderLabel:     lipgloss.NewStyle(),
 		HeaderIdentity:  lipgloss.NewStyle().Bold(true),
+		HeaderTitle:     lipgloss.NewStyle().Bold(true),
 		Version:         lipgloss.NewStyle(),
 		Rule:            lipgloss.NewStyle(),
 		FooterKey:       lipgloss.NewStyle().Bold(true),

@@ -125,11 +125,45 @@ func TestLoadsAndRendersSessions(t *testing.T) {
 		"SESSION", "STATE",
 		"bob@ssh01", "alice@ssh02",
 		"a1", "b2", "laptop", "2 connections", "1 connection", "0 hops", "1 hops", "stale",
-		"2 sessions",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view is missing %q:\n%s", want, view)
 		}
+	}
+	lines := strings.Split(view, "\n")
+	if last := lines[len(lines)-1]; strings.TrimSpace(last) != "" {
+		t.Fatalf("last line = %q, want empty", last)
+	}
+}
+
+func TestSearchPromptAlignsWithSessionColumnAndMarksFocus(t *testing.T) {
+	m := newScreen(&fakeSource{items: testSessions()}, &fakeCloser{})
+	load(t, m)
+
+	lines := func() []string {
+		return strings.Split(ansi.Strip(m.View()), "\n")
+	}
+	focused := lines()
+	hostColumn := strings.Index(focused[3], "SESSION")
+	if got := strings.Index(focused[1], "search"); got != hostColumn {
+		t.Fatalf("search starts at %d, SESSION at %d:\n%s", got, hostColumn, focused[1])
+	}
+	if !strings.Contains(focused[1], "> search") {
+		t.Fatalf("search line = %q, want focus marker", focused[1])
+	}
+
+	focusSessionList(m)
+	unfocused := lines()
+	if strings.Contains(unfocused[1], ">") {
+		t.Fatalf("search line = %q, want no focus marker", unfocused[1])
+	}
+	if got := strings.Index(unfocused[1], "search"); got != hostColumn {
+		t.Fatalf("unfocused search starts at %d, SESSION at %d:\n%s", got, hostColumn, unfocused[1])
+	}
+	m.input.Prompt = m.searchPrompt()
+	m.input.SetStyles(inputStyles(m.styles))
+	if got := m.input.Styles().Blurred.Prompt.GetForeground(); fmt.Sprint(got) != fmt.Sprint(m.styles.Muted.GetForeground()) {
+		t.Fatalf("blurred prompt foreground = %v, want muted", got)
 	}
 }
 
@@ -236,10 +270,6 @@ func TestSearchFiltersOnHostname(t *testing.T) {
 	if strings.Contains(view, "bob@ssh01") || !strings.Contains(view, "alice@ssh02") {
 		t.Fatalf("filtered view is wrong:\n%s", view)
 	}
-	if !strings.Contains(view, "1 of 2 sessions") {
-		t.Fatalf("filtered count is missing:\n%s", view)
-	}
-
 	for range len("SSH02") {
 		m.Update(press(tea.KeyBackspace, ""))
 	}
@@ -362,7 +392,7 @@ func TestMoveAndScrollTracksSelection(t *testing.T) {
 		items[i] = Session{ID: fmt.Sprintf("s%02d", i), Target: fmt.Sprintf("h%02d", i), State: "active"}
 	}
 	m := newScreen(&fakeSource{items: items}, &fakeCloser{})
-	m.Resize(60, 8)
+	m.Resize(60, 10)
 	load(t, m)
 
 	for range 4 {
@@ -439,8 +469,8 @@ func TestPickerSelectsSession(t *testing.T) {
 	if msg.Screen.Title() != "Add tunnel" {
 		t.Fatalf("screen title = %q, want Add tunnel", msg.Screen.Title())
 	}
-	if view := ansi.Strip(m.View()); !strings.Contains(view, "select a session for the new tunnel") {
-		t.Fatalf("picker hint is missing:\n%s", view)
+	if view := ansi.Strip(m.View()); strings.Contains(view, "sessions") {
+		t.Fatalf("picker view should not show a count:\n%s", view)
 	}
 }
 

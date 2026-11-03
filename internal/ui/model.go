@@ -239,8 +239,9 @@ func resolveScreenDeps(opts ModelOptions, scope controlScope) screenDeps {
 	}
 }
 
-// refreshHeader matches the header identity to the active screen's scope.
+// refreshHeader matches the header title and identity to the active screen.
 func (m *Model) refreshHeader() {
+	m.header.SetTitle(m.stack.Top().Title())
 	if !m.inSession {
 		return
 	}

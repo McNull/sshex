@@ -54,7 +54,7 @@ func newScreen(source HostSource, runner Runner) *Model {
 
 func testHosts() []sshhosts.Host {
 	return []sshhosts.Host{
-		{Name: "db", Description: "db.example.com"},
+		{Name: "db", Description: "db.example.com", Port: 2222},
 		{Name: "host1"},
 		{Name: "web", Description: "web.example.com"},
 	}
@@ -94,9 +94,6 @@ func TestLoadsAndFiltersHosts(t *testing.T) {
 	if len(m.filtered) != 3 {
 		t.Fatalf("filtered = %d, want 3", len(m.filtered))
 	}
-	if !strings.Contains(m.View(), "3 of 3 hosts") {
-		t.Fatalf("view is missing the host count:\n%s", m.View())
-	}
 
 	typeText(m, "WE")
 
@@ -107,8 +104,40 @@ func TestLoadsAndFiltersHosts(t *testing.T) {
 	if !strings.Contains(view, "web") || strings.Contains(view, "host1") {
 		t.Fatalf("filtered view is wrong:\n%s", view)
 	}
-	if !strings.Contains(view, "1 of 3 hosts") {
-		t.Fatalf("view is missing the filtered count:\n%s", view)
+	lines := strings.Split(ansi.Strip(view), "\n")
+	if last := lines[len(lines)-1]; strings.TrimSpace(last) != "" {
+		t.Fatalf("last line = %q, want empty", last)
+	}
+}
+
+func TestSearchPromptAlignsWithHostColumnAndMarksFocus(t *testing.T) {
+	m := newScreen(fakeSource{hosts: testHosts()}, &fakeRunner{})
+	load(t, m)
+
+	lines := func() []string {
+		return strings.Split(ansi.Strip(m.View()), "\n")
+	}
+	focused := lines()
+	hostColumn := strings.Index(focused[3], "HOST")
+	if got := strings.Index(focused[1], "search"); got != hostColumn {
+		t.Fatalf("search starts at %d, HOST at %d:\n%s", got, hostColumn, focused[1])
+	}
+	if !strings.Contains(focused[1], "> search") {
+		t.Fatalf("search line = %q, want focus marker", focused[1])
+	}
+
+	m.Update(press(tea.KeyTab, ""))
+	unfocused := lines()
+	if strings.Contains(unfocused[1], ">") {
+		t.Fatalf("search line = %q, want no focus marker", unfocused[1])
+	}
+	if got := strings.Index(unfocused[1], "search"); got != hostColumn {
+		t.Fatalf("unfocused search starts at %d, HOST at %d:\n%s", got, hostColumn, unfocused[1])
+	}
+
+	m.searchView()
+	if got := m.input.Styles().Blurred.Prompt.GetForeground(); fmt.Sprint(got) != fmt.Sprint(m.styles.Muted.GetForeground()) {
+		t.Fatalf("blurred prompt foreground = %v, want muted", got)
 	}
 }
 
@@ -264,8 +293,8 @@ func TestListScrollsWithSelection(t *testing.T) {
 	if m.selected != 10 {
 		t.Fatalf("selected = %d, want 10", m.selected)
 	}
-	if m.offset != 2 {
-		t.Fatalf("offset = %d, want 2", m.offset)
+	if m.offset != 4 {
+		t.Fatalf("offset = %d, want 4", m.offset)
 	}
 	view := m.View()
 	if strings.Contains(view, "h00") || !strings.Contains(view, "h09") {
@@ -278,16 +307,23 @@ func TestListHeaderIsStickyAndAligned(t *testing.T) {
 	load(t, m)
 
 	lines := strings.Split(ansi.Strip(m.View()), "\n")
-	header := lines[1]
+	header := lines[3]
+	if strings.TrimSpace(lines[0]) != "" || strings.TrimSpace(lines[2]) != "" {
+		t.Fatalf("screen = %q, want blank rows around the search field", strings.Join(lines[:4], "\n"))
+	}
 	nameColumn := strings.Index(header, "HOST")
+	portColumn := strings.Index(header, "PORT")
 	descColumn := strings.Index(header, "HOSTNAME")
-	if nameColumn < 0 || descColumn < 0 {
-		t.Fatalf("header = %q, want HOST and HOSTNAME columns", header)
+	if nameColumn < 0 || portColumn < 0 || descColumn < 0 {
+		t.Fatalf("header = %q, want HOST, PORT and HOSTNAME columns", header)
 	}
 
-	firstRow := lines[2]
-	if got := lipgloss.Width(firstRow[:strings.Index(firstRow, "db")]); got != nameColumn {
+	firstRow := lines[4]
+	if got := lipgloss.Width(firstRow[:strings.Index(firstRow, "db ")]); got != nameColumn {
 		t.Fatalf("host name starts at %d, header at %d", got, nameColumn)
+	}
+	if got := lipgloss.Width(firstRow[:strings.Index(firstRow, "2222")]); got != portColumn {
+		t.Fatalf("port starts at %d, header at %d", got, portColumn)
 	}
 	if got := lipgloss.Width(firstRow[:strings.Index(firstRow, "db.example.com")]); got != descColumn {
 		t.Fatalf("description starts at %d, header at %d", got, descColumn)

@@ -21,6 +21,11 @@ const (
 	focusList
 )
 
+const (
+	focusedSearchPrompt   = " > search "
+	unfocusedSearchPrompt = "   search "
+)
+
 // Options configures the Commands screen. AddOpener and EditOpener supply the
 // form screens, so the list never constructs them or reaches the controller's
 // storage. Existing commands are passed to the form for uniqueness checks.
@@ -98,7 +103,7 @@ type toggledMsg struct {
 // New returns a Commands screen.
 func New(opts Options) *Model {
 	input := textinput.New()
-	input.Prompt = "search › "
+	input.Prompt = focusedSearchPrompt
 	input.Placeholder = "name or alias"
 	input.SetStyles(inputStyles(opts.Styles))
 
@@ -588,9 +593,10 @@ func (m *Model) commandsCopy() []Command {
 }
 
 // commandRows returns the number of rows that fit in the content area. The
-// search field, header and status line each take one row.
+// blank rows around the search field, the search field itself, the header and
+// the bottom status line each take one row.
 func (m *Model) commandRows() int {
-	return max(m.height-3, 0)
+	return max(m.height-5, 0)
 }
 
 func (m *Model) clampOffset() {
@@ -629,19 +635,13 @@ func inputStyles(styles *theme.Styles) textinput.Styles {
 		Prompt:      styles.InputPrompt,
 	}
 	s.Blurred = s.Focused
+	s.Blurred.Prompt = styles.Muted
 	s.Cursor = textinput.CursorStyle{
 		Color: styles.Cursor.GetForeground(),
 		Shape: tea.CursorBlock,
 		Blink: true,
 	}
 	return s
-}
-
-func plural(count int, singular, plural string) string {
-	if count == 1 {
-		return singular
-	}
-	return plural
 }
 
 func padRight(s string, width int) string {

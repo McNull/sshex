@@ -236,11 +236,14 @@ func TestLoadsAndRendersTunnels(t *testing.T) {
 		"localhost:8080 > db:5432", "localhost:9000 < localhost:80",
 		"active", "failed",
 		"t1", "t2", "bob@ssh01", "local", "remote", "stale", "boom",
-		"2 tunnels",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view is missing %q:\n%s", want, view)
 		}
+	}
+	lines := strings.Split(view, "\n")
+	if last := lines[len(lines)-1]; strings.TrimSpace(last) != "" {
+		t.Fatalf("last line = %q, want empty", last)
 	}
 }
 
@@ -483,11 +486,11 @@ func TestMoveAndScrollTracksSelection(t *testing.T) {
 	if m.selected != 4 {
 		t.Fatalf("selected = %d, want 4", m.selected)
 	}
-	if m.offset != 2 {
-		t.Fatalf("offset = %d, want 2", m.offset)
+	if m.offset != 3 {
+		t.Fatalf("offset = %d, want 3", m.offset)
 	}
 	view := ansi.Strip(m.View())
-	if strings.Contains(view, "t00") || !strings.Contains(view, "t02") || !strings.Contains(view, "t04") {
+	if strings.Contains(view, "t00") || !strings.Contains(view, "t03") || !strings.Contains(view, "t04") {
 		t.Fatalf("view does not show the scrolled window:\n%s", view)
 	}
 

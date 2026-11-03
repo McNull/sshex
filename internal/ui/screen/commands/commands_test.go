@@ -248,11 +248,14 @@ func TestLoadsAndRendersCommands(t *testing.T) {
 	for _, want := range []string{
 		"NAME", "ALIAS", "STATE",
 		"code", "git-status", "gs", "enabled", "disabled",
-		"2 commands",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view is missing %q:\n%s", want, view)
 		}
+	}
+	lines := strings.Split(view, "\n")
+	if last := lines[len(lines)-1]; strings.TrimSpace(last) != "" {
+		t.Fatalf("last line = %q, want empty", last)
 	}
 	for _, unwanted := range []string{"code --folder-uri", "git status --short", "alias "} {
 		if strings.Contains(view, unwanted) {
@@ -268,6 +271,38 @@ func TestReadOnlyStatus(t *testing.T) {
 	view := ansi.Strip(m.View())
 	if !strings.Contains(view, "read-only") || !strings.Contains(view, "managed on the origin") {
 		t.Fatalf("read-only status is missing:\n%s", view)
+	}
+}
+
+func TestSearchPromptAlignsWithNameColumnAndMarksFocus(t *testing.T) {
+	m := newScreen(editableSource(testCommands()...), &fakeController{})
+	load(t, m)
+
+	lines := func() []string {
+		return strings.Split(ansi.Strip(m.View()), "\n")
+	}
+	unfocused := lines()
+	nameColumn := strings.Index(unfocused[3], "NAME")
+	if got := strings.Index(unfocused[1], "search"); got != nameColumn {
+		t.Fatalf("search starts at %d, NAME at %d:\n%s", got, nameColumn, unfocused[1])
+	}
+	if strings.Contains(unfocused[1], ">") {
+		t.Fatalf("search line = %q, want no focus marker", unfocused[1])
+	}
+
+	searchFocus(m)
+	focused := lines()
+	if !strings.Contains(focused[1], "> search") {
+		t.Fatalf("search line = %q, want focus marker", focused[1])
+	}
+	if got := strings.Index(focused[1], "search"); got != nameColumn {
+		t.Fatalf("focused search starts at %d, NAME at %d:\n%s", got, nameColumn, focused[1])
+	}
+
+	m.input.Prompt = m.searchPrompt()
+	m.input.SetStyles(inputStyles(m.styles))
+	if got := m.input.Styles().Blurred.Prompt.GetForeground(); fmt.Sprint(got) != fmt.Sprint(m.styles.Muted.GetForeground()) {
+		t.Fatalf("blurred prompt foreground = %v, want muted", got)
 	}
 }
 
@@ -328,8 +363,8 @@ func TestSearchFiltersByNameAndAlias(t *testing.T) {
 	if got := fmt.Sprint(commandNames(m.filtered)); got != "[git-status]" {
 		t.Fatalf("alias match = %v, want [git-status]", got)
 	}
-	if view := ansi.Strip(m.View()); !strings.Contains(view, "1 of 3 commands") {
-		t.Fatalf("filtered count is missing:\n%s", view)
+	if view := ansi.Strip(m.View()); strings.Contains(view, "of 3 commands") {
+		t.Fatalf("filtered count should be hidden:\n%s", view)
 	}
 
 	m.Update(press(tea.KeyBackspace, ""))
@@ -692,7 +727,7 @@ func TestMoveAndScrollTracksSelection(t *testing.T) {
 		items[i] = Command{Name: fmt.Sprintf("c%02d", i), Template: "true"}
 	}
 	m := newScreen(editableSource(items...), &fakeController{})
-	m.Resize(60, 6)
+	m.Resize(60, 8)
 	load(t, m)
 	listFocus(m)
 

@@ -14,7 +14,7 @@ func (m *Model) View() string {
 	}
 
 	lines := make([]string, 0, m.height)
-	lines = append(lines, m.headerView())
+	lines = append(lines, "", m.headerView())
 	lines = append(lines, m.listView()...)
 
 	for len(lines) < m.height-1 {
@@ -169,11 +169,7 @@ func (m *Model) statusView() string {
 		}
 		return m.styles.ScreenHint.Render(truncate(m.status, m.width))
 	}
-	if m.loading || m.loadErr != nil || len(m.tunnels) == 0 {
-		return ""
-	}
-	message := fmt.Sprintf("%d %s", len(m.tunnels), plural(len(m.tunnels), "tunnel", "tunnels"))
-	return m.styles.ScreenHint.Render(truncate(message, m.width))
+	return ""
 }
 
 func plural(count int, singular, plural string) string {

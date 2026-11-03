@@ -367,14 +367,7 @@ func (f *Form) View() string {
 
 	f.refreshInputStyles()
 
-	title := "Add command"
-	if f.original != nil {
-		title = "Edit command · " + f.original.Name
-	}
-
 	lines := []string{
-		f.styles.ScreenTitle.Render(truncate(title, f.width)),
-		"",
 		f.inputLine("name", fieldName, f.nameInput),
 	}
 	lines = append(lines, f.commandLines()...)

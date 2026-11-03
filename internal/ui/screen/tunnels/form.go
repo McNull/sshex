@@ -395,9 +395,9 @@ func (f *AddForm) View() string {
 		return ""
 	}
 
-	title := truncate("Add tunnel · "+f.sessionLabel()+" · "+f.directionLabel(), f.width)
+	context := truncate(f.sessionLabel()+" · "+f.directionLabel(), f.width)
 	lines := []string{
-		f.styles.ScreenTitle.Render(title),
+		f.styles.ScreenHint.Render(context),
 		"",
 		f.input.View(),
 	}

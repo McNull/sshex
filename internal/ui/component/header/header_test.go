@@ -43,6 +43,44 @@ func TestViewRightAlignsIdentity(t *testing.T) {
 	}
 }
 
+func TestViewCentersTitle(t *testing.T) {
+	styles := theme.NewStyles(theme.Load(theme.Options{NoColor: true}))
+	m := New(&styles, "0.4.6", "", "")
+	m.SetTitle("Sessions")
+	m.Resize(80)
+
+	line := strings.Split(m.View(), "\n")[0]
+	plain := ansi.Strip(line)
+	wantStart := (80 - len("Sessions")) / 2
+	if got := strings.Index(plain, "Sessions"); got != wantStart {
+		t.Fatalf("title starts at %d, want %d: %q", got, wantStart, plain)
+	}
+	if got := lipgloss.Width(line); got != 80 {
+		t.Fatalf("header line width = %d, want 80", got)
+	}
+	if !strings.Contains(line, styles.HeaderTitle.Render("Sessions")) {
+		t.Fatal("title is not rendered with the header title style")
+	}
+}
+
+func TestViewTruncatesTitleAndIdentityToFit(t *testing.T) {
+	styles := theme.NewStyles(theme.Load(theme.Options{NoColor: true}))
+	m := New(&styles, "0.4.6", "a-very-long-broker-hostname", "alice@a-very-long-remote-hostname")
+	m.SetTitle("Select session")
+	m.Resize(48)
+
+	line := strings.Split(m.View(), "\n")[0]
+	if got := lipgloss.Width(line); got != 48 {
+		t.Fatalf("header line width = %d, want 48: %q", got, line)
+	}
+	if !strings.Contains(ansi.Strip(line), "Select session") {
+		t.Fatalf("header line = %q, want title", ansi.Strip(line))
+	}
+	if !strings.Contains(line, "…") {
+		t.Fatalf("header line = %q, want truncated identity", line)
+	}
+}
+
 func TestViewTruncatesIdentityToFit(t *testing.T) {
 	styles := theme.NewStyles(theme.Load(theme.Options{NoColor: true}))
 	m := New(&styles, "0.4.6", "a-very-long-broker-hostname", "alice@a-very-long-remote-hostname")

@@ -47,6 +47,7 @@ Host web
     HostName web.example.com
 Host db db2
     HostName db.example.com
+    Port 2222
 Host *.internal !bad
     HostName wild.example.com
 `)
@@ -63,6 +64,9 @@ Host *.internal !bad
 	assertNames(t, hosts, "db", "db2", "web")
 	if hosts[0].Description != "db.example.com" || hosts[2].Description != "web.example.com" {
 		t.Fatalf("descriptions = %+v", hosts)
+	}
+	if hosts[0].Port != 2222 || hosts[1].Port != 2222 || hosts[2].Port != 0 {
+		t.Fatalf("ports = %+v", hosts)
 	}
 }
 
@@ -104,6 +108,9 @@ func TestResolveKnownHosts(t *testing.T) {
 		t.Fatalf("Resolve() error: %v", err)
 	}
 	assertNames(t, hosts, "ca.example", "host1", "host2", "host3")
+	if hosts[3].Port != 2222 {
+		t.Fatalf("host3 port = %d, want 2222", hosts[3].Port)
+	}
 }
 
 func TestResolveHostsFile(t *testing.T) {

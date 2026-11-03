@@ -25,6 +25,11 @@ const (
 	focusList
 )
 
+const (
+	focusedSearchPrompt   = " > search "
+	unfocusedSearchPrompt = "   search "
+)
+
 // Session is one row of the session list. It is deliberately independent of
 // the broker DTO so the screen can be tested without a daemon.
 type Session struct {
@@ -124,7 +129,7 @@ type closedMsg struct {
 // New returns a Sessions screen.
 func New(opts Options) *Model {
 	input := textinput.New()
-	input.Prompt = "search › "
+	input.Prompt = focusedSearchPrompt
 	input.Placeholder = "host name or part of it"
 	input.SetStyles(inputStyles(opts.Styles))
 	input.Focus()
@@ -610,9 +615,10 @@ func (m *Model) removeSession(id string) {
 }
 
 // sessionRows returns the number of sessions that fit in the content area.
-// The search field, header and status line each take one row.
+// The blank rows around the search field, the search field itself, the header
+// and the bottom status line each take one row.
 func (m *Model) sessionRows() int {
-	return max((m.height-3)/2, 0)
+	return max((m.height-5)/2, 0)
 }
 
 func (m *Model) clampOffset() {
@@ -642,9 +648,10 @@ func (m *Model) View() string {
 		return ""
 	}
 
+	m.input.Prompt = m.searchPrompt()
 	m.input.SetStyles(inputStyles(m.styles))
 	lines := make([]string, 0, m.height)
-	lines = append(lines, m.input.View(), m.headerView())
+	lines = append(lines, "", m.input.View(), "", m.headerView())
 	lines = append(lines, m.listView()...)
 
 	for len(lines) < m.height-1 {
@@ -656,6 +663,13 @@ func (m *Model) View() string {
 		lines[i] = padRight(lines[i], m.width)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (m *Model) searchPrompt() string {
+	if m.focus == focusSearch {
+		return focusedSearchPrompt
+	}
+	return unfocusedSearchPrompt
 }
 
 func (m *Model) headerView() string {
@@ -801,19 +815,7 @@ func (m *Model) statusView() string {
 		}
 		return m.styles.ScreenHint.Render(truncate(m.status, m.width))
 	}
-	if m.loading || m.loadErr != nil || len(m.sessions) == 0 {
-		return ""
-	}
-	var message string
-	if strings.TrimSpace(m.query) == "" {
-		message = fmt.Sprintf("%d %s", len(m.sessions), plural(len(m.sessions), "session", "sessions"))
-	} else {
-		message = fmt.Sprintf("%d of %d sessions", len(m.filtered), len(m.sessions))
-	}
-	if m.picker() {
-		message = "select a session for the new tunnel · " + message
-	}
-	return m.styles.ScreenHint.Render(truncate(message, m.width))
+	return ""
 }
 
 func inputStyles(styles *theme.Styles) textinput.Styles {
@@ -825,6 +827,7 @@ func inputStyles(styles *theme.Styles) textinput.Styles {
 		Prompt:      styles.InputPrompt,
 	}
 	s.Blurred = s.Focused
+	s.Blurred.Prompt = styles.Muted
 	s.Cursor = textinput.CursorStyle{
 		Color: styles.Cursor.GetForeground(),
 		Shape: tea.CursorBlock,

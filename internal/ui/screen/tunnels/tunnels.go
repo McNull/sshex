@@ -396,9 +396,10 @@ func (m *Model) removeTunnel(id string) {
 }
 
 // tunnelRows returns the number of two-line rows that fit in the content
-// area. The list header and status line each take one row.
+// area. The blank line above the list header, the header itself and the
+// status line each take one row.
 func (m *Model) tunnelRows() int {
-	return max((m.height-2)/2, 0)
+	return max((m.height-3)/2, 0)
 }
 
 func (m *Model) clampOffset() {
