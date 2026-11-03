@@ -2,6 +2,9 @@ package remoteinstall
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -103,6 +106,9 @@ func TestCompletionUninstallScript(t *testing.T) {
 		"${ZDOTDIR:-$HOME}/.zshrc",
 		completionsMarker,
 		"# <<< sshex completions <<<",
+		completionsLineMarker,
+		"sshexrc.bash",
+		"sshexrc.zsh",
 		`${XDG_CONFIG_HOME:-$HOME/.config}/fish`,
 		"conf.d/sshex.fish",
 		"completions/sshex.fish",
@@ -123,5 +129,47 @@ func TestUninstallCompletionsRunsScript(t *testing.T) {
 	}
 	if len(conn.commands) != 1 || !strings.Contains(conn.commands[0], initMarker) {
 		t.Fatalf("Uninstall() commands = %v", conn.commands)
+	}
+}
+
+func TestCompletionUninstallScriptRemovesManagedWiring(t *testing.T) {
+	home := t.TempDir()
+	dataDir := filepath.Join(home, ".local", "share", "sshex")
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	rc := filepath.Join(home, ".zshrc")
+	content := "before\n" +
+		completionsMarker + "\nold completion hook\n# <<< sshex completions <<<\n" +
+		`. "$HOME/.local/share/sshex/sshexrc.zsh" # ` + completionsLineMarker + "\n" +
+		"after\n"
+	if err := os.WriteFile(rc, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"sshexrc.zsh", "sshexrc.bash", "init.bash"} {
+		if err := os.WriteFile(filepath.Join(dataDir, name), []byte("generated\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Setenv("HOME", home)
+	t.Setenv("SSHEX_HOME", dataDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	cmd := exec.Command("sh", "-c", completionUninstallScript())
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("uninstall script error: %v\n%s", err, out)
+	}
+
+	got, err := os.ReadFile(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "before\nafter\n" {
+		t.Fatalf("zshrc after uninstall = %q, want %q", got, "before\nafter\n")
+	}
+	for _, name := range []string{"sshexrc.zsh", "sshexrc.bash", "init.bash"} {
+		if _, err := os.Stat(filepath.Join(dataDir, name)); !os.IsNotExist(err) {
+			t.Fatalf("%s still exists after uninstall", name)
+		}
 	}
 }

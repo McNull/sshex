@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	completionsMarker = "# >>> sshex completions >>>"
-	dataExpr          = `${SSHEX_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/sshex}`
+	completionsMarker     = "# >>> sshex completions >>>"
+	completionsLineMarker = "sshex-completions-managed"
+	dataExpr              = `${SSHEX_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/sshex}`
 	// getent exists on Linux; macOS uses dscl to read the login shell when
 	// SHELL is unset (for example over a non-login SSH session).
 	shellDetectScript = `s=${SHELL:-}; ` +
@@ -138,14 +139,15 @@ func removeManagedBlockScript(rc, start, end string) string {
 // completion files. It is safe to run repeatedly and with missing files.
 func completionUninstallScript() string {
 	fishConfigDir := `"${XDG_CONFIG_HOME:-$HOME/.config}/fish"`
-	removeBlock := `fish_rc=` + fishConfigDir + `/conf.d/sshex.fish; for rc in "$HOME/.bashrc" "${ZDOTDIR:-$HOME}/.zshrc"; do ` +
-		`[ -f "$rc" ] || continue; ` +
-		removeManagedBlockScript(`"$rc"`, completionsMarker, "# <<< sshex completions <<<") + `; ` +
-		`done; fish_rc=` + fishConfigDir + `/conf.d/sshex.fish; rc="$fish_rc"; ` +
-		`if [ -f "$fish_rc" ]; then ` +
-		removeManagedBlockScript(`"$rc"`, completionsMarker, "# <<< sshex completions <<<") + `; ` +
-		`[ -s "$fish_rc" ] || rm -f "$fish_rc"; fi; ` +
-		`rm -f "` + dataExpr + `/completions/sshex.bash" "` + dataExpr + `/completions/sshex.zsh" "` + dataExpr + `/completions/sshex.fish" ` +
-		fishConfigDir + `/completions/sshex.fish`
-	return removeBlock + `; ` + initUninstallScript()
+	fishRC := fishConfigDir + `/conf.d/sshex.fish`
+	var b strings.Builder
+	b.WriteString(`for rc in "$HOME/.bashrc" "${ZDOTDIR:-$HOME}/.zshrc"; do [ -f "$rc" ] || continue; `)
+	b.WriteString(removeManagedLineScript(`"$rc"`, completionsLineMarker) + `; `)
+	b.WriteString(removeManagedBlockScript(`"$rc"`, completionsMarker, "# <<< sshex completions <<<") + `; done; `)
+	b.WriteString(`fish_rc=` + fishRC + `; if [ -f "$fish_rc" ]; then rc="$fish_rc"; `)
+	b.WriteString(removeManagedBlockScript(`"$rc"`, completionsMarker, "# <<< sshex completions <<<") + `; `)
+	b.WriteString(`[ -s "$fish_rc" ] || rm -f "$fish_rc"; fi; `)
+	b.WriteString(`rm -f "` + dataExpr + `/completions/sshex.bash" "` + dataExpr + `/completions/sshex.zsh" "` + dataExpr + `/completions/sshex.fish" ` +
+		`"` + dataExpr + `/sshexrc.bash" "` + dataExpr + `/sshexrc.zsh" ` + fishConfigDir + `/completions/sshex.fish`)
+	return b.String() + `; ` + initUninstallScript()
 }

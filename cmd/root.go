@@ -102,7 +102,10 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Config file to use (default ~/.config/sshex/config.yml)")
 	rootCmd.PersistentFlags().BoolVar(&versionCheck, "version-check", false, "Perform online version check and exit")
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
-		if cmd == updateCmd || cmd == versionCheckCmd {
+		if cmd == updateCmd || cmd == versionCheckCmd || cmd == completionsCmd {
+			// These commands do not need the application, config, or version
+			// state. Keeping them dependency-free also keeps shell startup fast
+			// when the generated shellrc evaluates `sshex completions`.
 			return nil
 		}
 		if versionCheck {

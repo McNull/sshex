@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"path"
 
 	"github.com/spf13/cobra"
 )
@@ -12,7 +13,8 @@ var completionsCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		out := cmd.OutOrStdout()
-		switch args[0] {
+		shell := path.Base(args[0])
+		switch shell {
 		case "bash":
 			return rootCmd.GenBashCompletionV2(out, true)
 		case "zsh":

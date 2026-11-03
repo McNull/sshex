@@ -25,7 +25,9 @@ curl -fsSL https://raw.githubusercontent.com/McNull/sshex/main/install.sh | sh
 ```
 
 The installer places the binary in `~/.local/bin` and sets up shell completions
-for the detected shell. Set `SSHEX_NO_COMPLETIONS=1` to skip the completions.
+for the detected shell. It adds a single startup line that sources
+`~/.local/share/sshex/sshexrc.<shell>`, which keeps the startup file clean.
+Set `SSHEX_NO_COMPLETIONS=1` to skip the completions.
 
 ## Quick start
 
