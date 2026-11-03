@@ -249,6 +249,23 @@ func TestSearchFiltersOnHostname(t *testing.T) {
 	}
 }
 
+func TestSearchInputRefreshesStylesWhenThemeChanges(t *testing.T) {
+	styles := theme.NewStyles(theme.Load(theme.Options{HasDarkBackground: true}))
+	m := New(Options{Styles: &styles})
+	m.Resize(60, 12)
+
+	styles = theme.NewStyles(theme.Load(theme.Options{HasDarkBackground: false}))
+	m.View()
+
+	got := m.input.Styles().Focused
+	if fmt.Sprint(got.Text.GetForeground()) != fmt.Sprint(styles.InputText.GetForeground()) {
+		t.Fatalf("search text foreground = %v, want %v", got.Text.GetForeground(), styles.InputText.GetForeground())
+	}
+	if fmt.Sprint(got.Prompt.GetForeground()) != fmt.Sprint(styles.InputPrompt.GetForeground()) {
+		t.Fatalf("search prompt foreground = %v, want %v", got.Prompt.GetForeground(), styles.InputPrompt.GetForeground())
+	}
+}
+
 func TestSearchTypingDoesNotTriggerActions(t *testing.T) {
 	closer := &fakeCloser{}
 	m := newScreen(&fakeSource{items: testSessions()}, closer)

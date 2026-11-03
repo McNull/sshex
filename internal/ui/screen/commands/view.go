@@ -13,6 +13,7 @@ func (m *Model) View() string {
 		return ""
 	}
 
+	m.input.SetStyles(inputStyles(m.styles))
 	lines := make([]string, 0, m.height)
 	lines = append(lines, m.input.View(), m.headerView())
 	lines = append(lines, m.listView()...)

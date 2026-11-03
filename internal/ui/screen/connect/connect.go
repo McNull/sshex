@@ -326,6 +326,7 @@ func (m *Model) View() string {
 }
 
 func (m *Model) searchView() string {
+	m.input.SetStyles(inputStyles(m.styles))
 	return m.input.View()
 }
 
