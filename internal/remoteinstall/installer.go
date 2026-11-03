@@ -13,11 +13,18 @@ type Runner interface {
 	Run(ctx context.Context, command string, stdin io.Reader, stdout, stderr io.Writer) error
 }
 
+// UninstallOptions controls optional teardown beyond the sshex installation.
+type UninstallOptions struct {
+	// RemoveConfig also removes the sshex config file and its directory when it
+	// becomes empty.
+	RemoveConfig bool
+}
+
 type Installer interface {
 	Detect(ctx context.Context, run Runner) (Platform, error)
 	RemotePaths(ctx context.Context, run Runner) (RemotePaths, error)
 	Install(ctx context.Context, run Runner, paths RemotePaths, platform Platform) error
 	WriteSession(ctx context.Context, run Runner, paths RemotePaths, file sessionfile.File) error
 	Remove(ctx context.Context, run Runner, paths RemotePaths, file sessionfile.File) error
-	Uninstall(ctx context.Context, run Runner, paths RemotePaths) error
+	Uninstall(ctx context.Context, run Runner, paths RemotePaths, opts UninstallOptions) error
 }

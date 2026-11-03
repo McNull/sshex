@@ -128,7 +128,7 @@ func TestRemove(t *testing.T) {
 func TestUninstall(t *testing.T) {
 	conn := &fakeConn{}
 	paths := RemotePaths{DataDir: "/home/tester/.local/share/sshex", RunDir: "/run/user/1000/sshex"}
-	if err := newTestInstaller(t).Uninstall(context.Background(), conn, paths); err != nil {
+	if err := newTestInstaller(t).Uninstall(context.Background(), conn, paths, UninstallOptions{}); err != nil {
 		t.Fatalf("Uninstall() error: %v", err)
 	}
 	if len(conn.commands) != 1 {
@@ -148,6 +148,17 @@ func TestUninstall(t *testing.T) {
 		if !strings.Contains(cmd, want) {
 			t.Fatalf("Uninstall() command missing %q:\n%s", want, cmd)
 		}
+	}
+}
+
+func TestUninstallRemoveConfig(t *testing.T) {
+	conn := &fakeConn{}
+	paths := RemotePaths{DataDir: "/home/tester/.local/share/sshex", RunDir: "/run/user/1000/sshex"}
+	if err := newTestInstaller(t).Uninstall(context.Background(), conn, paths, UninstallOptions{RemoveConfig: true}); err != nil {
+		t.Fatalf("Uninstall() error: %v", err)
+	}
+	if len(conn.commands) != 1 || !strings.Contains(conn.commands[0], `config_file="${SSHEX_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/sshex/config.yml}"`) {
+		t.Fatalf("Uninstall() command missing config removal: %v", conn.commands)
 	}
 }
 
@@ -181,7 +192,7 @@ func TestUninstallRemovesRecordedInstallDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command("sh", "-c", uninstallScript(paths))
+	cmd := exec.Command("sh", "-c", uninstallScript(paths, UninstallOptions{}))
 	cmd.Env = environmentWithoutHome(home)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("uninstallScript() error: %v\n%s", err, out)
@@ -194,6 +205,77 @@ func TestUninstallRemovesRecordedInstallDir(t *testing.T) {
 	}
 	if _, err := os.Stat(data); !os.IsNotExist(err) {
 		t.Fatalf("%s still exists after uninstall (err=%v)", data, err)
+	}
+}
+
+func TestUninstallScriptRemovesConfig(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uninstallScript requires a POSIX shell")
+	}
+
+	home := t.TempDir()
+	configDir := filepath.Join(home, ".config", "sshex")
+	configFile := filepath.Join(configDir, "config.yml")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configFile, []byte("server: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configFile+".lock", nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	paths := RemotePaths{
+		DataDir: filepath.Join(home, ".local", "share", "sshex"),
+		RunDir:  filepath.Join(home, "run"),
+	}
+
+	cmd := exec.Command("sh", "-c", uninstallScript(paths, UninstallOptions{RemoveConfig: true}))
+	cmd.Env = append(environmentWithoutHome(home), "SSHEX_CONFIG=", "XDG_CONFIG_HOME=")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("uninstallScript() error: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(configFile); !os.IsNotExist(err) {
+		t.Fatalf("%s still exists after uninstall (err=%v)", configFile, err)
+	}
+	if _, err := os.Stat(configDir); !os.IsNotExist(err) {
+		t.Fatalf("%s still exists after uninstall (err=%v)", configDir, err)
+	}
+}
+
+func TestUninstallScriptRemovesExplicitConfigOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uninstallScript requires a POSIX shell")
+	}
+
+	home := t.TempDir()
+	configDir := filepath.Join(home, "custom")
+	configFile := filepath.Join(configDir, "test.yml")
+	sibling := filepath.Join(configDir, "keep.txt")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configFile, []byte("server: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sibling, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	paths := RemotePaths{
+		DataDir: filepath.Join(home, ".local", "share", "sshex"),
+		RunDir:  filepath.Join(home, "run"),
+	}
+
+	cmd := exec.Command("sh", "-c", uninstallScript(paths, UninstallOptions{RemoveConfig: true}))
+	cmd.Env = append(environmentWithoutHome(home), "SSHEX_CONFIG="+configFile)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("uninstallScript() error: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(configFile); !os.IsNotExist(err) {
+		t.Fatalf("%s still exists after uninstall (err=%v)", configFile, err)
+	}
+	if _, err := os.Stat(sibling); err != nil {
+		t.Fatalf("%s was removed: %v", sibling, err)
 	}
 }
 

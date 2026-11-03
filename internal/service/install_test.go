@@ -13,9 +13,10 @@ import (
 )
 
 type fakeInstaller struct {
-	paths       remoteinstall.RemotePaths
-	uninstalled bool
-	written     sessionfile.File
+	paths        remoteinstall.RemotePaths
+	uninstalled  bool
+	removeConfig bool
+	written      sessionfile.File
 }
 
 func (f *fakeInstaller) Detect(context.Context, remoteinstall.Runner) (remoteinstall.Platform, error) {
@@ -39,8 +40,9 @@ func (f *fakeInstaller) Remove(context.Context, remoteinstall.Runner, remoteinst
 	return nil
 }
 
-func (f *fakeInstaller) Uninstall(context.Context, remoteinstall.Runner, remoteinstall.RemotePaths) error {
+func (f *fakeInstaller) Uninstall(_ context.Context, _ remoteinstall.Runner, _ remoteinstall.RemotePaths, opts remoteinstall.UninstallOptions) error {
 	f.uninstalled = true
+	f.removeConfig = opts.RemoveConfig
 	return nil
 }
 
@@ -131,6 +133,21 @@ func TestInstallServiceUninstallLocal(t *testing.T) {
 	}
 	if !installer.uninstalled || !completions.uninstalled {
 		t.Fatalf("Uninstall() installer=%v completions=%v, want both true", installer.uninstalled, completions.uninstalled)
+	}
+}
+
+func TestInstallServiceUninstallRemoveConfig(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("SSHEX_HOME", t.TempDir())
+
+	installer := &fakeInstaller{paths: remoteinstall.RemotePaths{DataDir: "/data", RunDir: "/run"}}
+	svc := newInstallService(t, installer, &fakeCompletions{}, &fakeTransport{}, &fakeConn{})
+
+	if err := svc.Uninstall(context.Background(), UninstallRequest{RemoveConfig: true}); err != nil {
+		t.Fatalf("Uninstall() error: %v", err)
+	}
+	if !installer.removeConfig {
+		t.Fatal("Uninstall() did not pass RemoveConfig to the installer")
 	}
 }
 

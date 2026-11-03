@@ -67,6 +67,7 @@ const uninstallHelp = `  Remove the sshex installation from a machine.
                           the value starts with '-'
     -y, --yes             Do not prompt for confirmation
         --force           Uninstall even if other sshex sessions are active
+        --config          Also remove the sshex config
     -h, --help            Show this help message and exit
 `
 

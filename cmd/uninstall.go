@@ -15,7 +15,9 @@ import (
 const uninstallDetails = `- the sshex binary and the ~/.local/bin/sshex link
 - shell completions, shell aliases and their shell startup wiring (bash, zsh, fish)
 - session state and runtime sockets
+`
 
+const uninstallConfigDetails = `- the sshex config and its related state
 `
 
 var uninstallCmd = &cobra.Command{
@@ -34,6 +36,7 @@ var uninstallCmd = &cobra.Command{
 		options, _ := cmd.Flags().GetStringArray("option")
 		yes, _ := cmd.Flags().GetBool("yes")
 		force, _ := cmd.Flags().GetBool("force")
+		removeConfig, _ := cmd.Flags().GetBool("config")
 
 		target := "this machine"
 		if host != "" {
@@ -45,7 +48,7 @@ var uninstallCmd = &cobra.Command{
 
 		out := cmd.OutOrStdout()
 		if !yes {
-			ok, err := confirmUninstall(cmd.InOrStdin(), out, target)
+			ok, err := confirmUninstall(cmd.InOrStdin(), out, target, removeConfig)
 			if err != nil {
 				return err
 			}
@@ -66,6 +69,7 @@ var uninstallCmd = &cobra.Command{
 			JumpHosts:    jump,
 			Options:      options,
 			Force:        force,
+			RemoveConfig: removeConfig,
 		})
 		if err != nil {
 			var active *service.ActiveSessionsError
@@ -95,10 +99,13 @@ func printActiveSessions(out io.Writer, sessions []sessionfile.File) {
 	}
 }
 
-func confirmUninstall(in io.Reader, out io.Writer, target string) (bool, error) {
+func confirmUninstall(in io.Reader, out io.Writer, target string, removeConfig bool) (bool, error) {
 	fmt.Fprintf(out, "This will remove the following from %s:\n", target)
 	fmt.Fprint(out, uninstallDetails)
-	fmt.Fprint(out, "Continue? (y/n): ")
+	if removeConfig {
+		fmt.Fprint(out, uninstallConfigDetails)
+	}
+	fmt.Fprint(out, "\nContinue? (y/n): ")
 	line, _ := bufio.NewReader(in).ReadString('\n')
 	switch strings.ToLower(strings.TrimSpace(line)) {
 	case "y", "yes":
@@ -115,4 +122,5 @@ func init() {
 	uninstallCmd.Flags().StringArrayP("option", "o", nil, "Pass an ssh option (key=value); a value starting with '-' is passed as raw ssh args")
 	uninstallCmd.Flags().BoolP("yes", "y", false, "Do not prompt for confirmation")
 	uninstallCmd.Flags().Bool("force", false, "Uninstall even if other sshex sessions are active")
+	uninstallCmd.Flags().Bool("config", false, "Also remove the sshex config")
 }

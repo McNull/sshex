@@ -21,6 +21,7 @@ type UninstallRequest struct {
 	JumpHosts    string
 	Options      []string
 	Force        bool
+	RemoveConfig bool
 }
 
 // SessionProbe lists the sessions that are still active on a target machine.
@@ -115,7 +116,9 @@ func (s *InstallService) Uninstall(ctx context.Context, req UninstallRequest) er
 			return err
 		}
 	}
-	if err := s.installer.Uninstall(ctx, run, paths); err != nil {
+	if err := s.installer.Uninstall(ctx, run, paths, remoteinstall.UninstallOptions{
+		RemoveConfig: req.RemoveConfig,
+	}); err != nil {
 		return err
 	}
 	if req.Host == "" && s.stopBroker != nil {

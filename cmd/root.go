@@ -85,7 +85,7 @@ func setupApplication(cmd *cobra.Command) error {
 		return err
 	}
 	checkVersionState(cmd)
-	cfg, err := config.Load(path)
+	cfg, err := config.Ensure(path)
 	if err != nil {
 		return err
 	}

@@ -95,6 +95,43 @@ func Default() Config {
 	}
 }
 
+// DefaultCommands returns the predefined commands shipped with a new config.
+// They are disabled so the first run only records them as examples; the user
+// opts in by enabling the ones they need.
+func DefaultCommands() []CommandConfig {
+	return []CommandConfig{
+		{
+			Name:     "code",
+			Command:  `code --${REMOTE_TARGET_KIND}-uri "vscode-remote://ssh-remote+${REMOTE_HOST}${REMOTE_TARGET}"`,
+			Alias:    "code",
+			Disabled: true,
+		},
+		{
+			Name:     "zed",
+			Command:  `zed "ssh://${REMOTE_USER}@${REMOTE_HOST}${REMOTE_TARGET}"`,
+			Alias:    "zed",
+			Disabled: true,
+		},
+	}
+}
+
+// Ensure loads the config at path, creating it with the built-in defaults when
+// the file does not exist. A missing parent directory is created as part of the
+// save. Existing files are never rewritten, so user changes survive.
+func Ensure(path string) (Config, error) {
+	if _, err := os.Stat(path); err == nil {
+		return Load(path)
+	} else if !os.IsNotExist(err) {
+		return Config{}, err
+	}
+	cfg := Default()
+	cfg.Commands = DefaultCommands()
+	if err := Save(path, cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
 func Dir() (string, error) {
 	if base := os.Getenv("XDG_CONFIG_HOME"); base != "" {
 		return filepath.Join(base, DirName), nil

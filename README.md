@@ -64,6 +64,8 @@ $ sshex command list
 $ sshex command edit code
 ```
 
+On first startup sshex creates the config with disabled `code` and `zed` examples. Enable one with `sshex command enable code` or `sshex command enable zed`; an existing config is never rewritten.
+
 Add, edit, list, enable, disable and remove commands. An `--alias` makes the name available in the remote shell. Only the origin can edit command definitions. `sshex command` manages the local machine; `sshex command --client` lists the current session's origin commands read-only.
 
 ### Executing Commands

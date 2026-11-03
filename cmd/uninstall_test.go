@@ -23,7 +23,7 @@ func TestConfirmUninstall(t *testing.T) {
 	}
 	for _, tc := range cases {
 		var out bytes.Buffer
-		got, err := confirmUninstall(strings.NewReader(tc.input), &out, "example.com")
+		got, err := confirmUninstall(strings.NewReader(tc.input), &out, "example.com", false)
 		if err != nil {
 			t.Fatalf("confirmUninstall(%q) error: %v", tc.input, err)
 		}
@@ -39,8 +39,26 @@ func TestConfirmUninstall(t *testing.T) {
 	}
 }
 
+func TestConfirmUninstallMentionsConfigOnlyWhenRequested(t *testing.T) {
+	var without bytes.Buffer
+	if _, err := confirmUninstall(strings.NewReader("n\n"), &without, "example.com", false); err != nil {
+		t.Fatalf("confirmUninstall() error: %v", err)
+	}
+	if strings.Contains(without.String(), "sshex config") {
+		t.Fatalf("confirmUninstall() unexpectedly mentions config:\n%s", without.String())
+	}
+
+	var with bytes.Buffer
+	if _, err := confirmUninstall(strings.NewReader("n\n"), &with, "example.com", true); err != nil {
+		t.Fatalf("confirmUninstall() error: %v", err)
+	}
+	if !strings.Contains(with.String(), "sshex config") {
+		t.Fatalf("confirmUninstall() output missing config description:\n%s", with.String())
+	}
+}
+
 func TestUninstallCommandFlags(t *testing.T) {
-	for _, name := range []string{"port", "identity", "option", "yes", "force"} {
+	for _, name := range []string{"port", "identity", "option", "yes", "force", "config"} {
 		if uninstallCmd.Flags().Lookup(name) == nil {
 			t.Fatalf("uninstall command missing --%s flag", name)
 		}

@@ -94,6 +94,55 @@ func TestLoadMissingReturnsDefault(t *testing.T) {
 	}
 }
 
+func TestEnsureCreatesDefaultCommands(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", FileName)
+
+	cfg, err := Ensure(path)
+	if err != nil {
+		t.Fatalf("Ensure() error: %v", err)
+	}
+	if len(cfg.Commands) != 2 {
+		t.Fatalf("Ensure() commands = %+v, want code and zed", cfg.Commands)
+	}
+
+	want := DefaultCommands()
+	for i, command := range cfg.Commands {
+		if command != want[i] {
+			t.Fatalf("command %d = %+v, want %+v", i, command, want[i])
+		}
+		if !command.Disabled {
+			t.Fatalf("default command %q is not disabled", command.Name)
+		}
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if len(loaded.Commands) != 2 || loaded.Commands[0].Name != "code" || loaded.Commands[1].Name != "zed" {
+		t.Fatalf("saved commands = %+v, want code and zed", loaded.Commands)
+	}
+}
+
+func TestEnsureKeepsExistingConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	data := "server:\n  transport: tcp\ncommands:\n  - name: custom\n    command: custom\n"
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatalf("write error: %v", err)
+	}
+
+	cfg, err := Ensure(path)
+	if err != nil {
+		t.Fatalf("Ensure() error: %v", err)
+	}
+	if cfg.Server.Transport != "tcp" {
+		t.Fatalf("transport = %q, want tcp", cfg.Server.Transport)
+	}
+	if len(cfg.Commands) != 1 || cfg.Commands[0].Name != "custom" {
+		t.Fatalf("commands = %+v, want only custom", cfg.Commands)
+	}
+}
+
 func TestLoadValid(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, FileName)
