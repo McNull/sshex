@@ -32,6 +32,8 @@ type Options struct {
 	UpdateAvailable string
 	// Theme selects the color theme. Empty uses the default theme.
 	Theme string
+	// SaveTheme persists a theme chosen in the UI. Nil keeps it for this run.
+	SaveTheme func(name string) error
 	// In and Out default to os.Stdin and os.Stdout.
 	In  io.Reader
 	Out io.Writer
@@ -59,6 +61,7 @@ func Run(opts Options) error {
 		Version:           opts.Version,
 		UpdateAvailable:   opts.UpdateAvailable,
 		Theme:             opts.Theme,
+		SaveTheme:         opts.SaveTheme,
 		HasDarkBackground: true,
 		NoColor:           noColor(opts),
 	})

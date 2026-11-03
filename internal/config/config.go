@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -16,6 +17,71 @@ type Config struct {
 	Server   ServerConfig    `yaml:"server"`
 	Hosts    []HostConfig    `yaml:"hosts,omitempty"`
 	Commands []CommandConfig `yaml:"commands,omitempty"`
+	UI       UIConfig        `yaml:"ui,omitempty"`
+}
+
+// UIConfig holds the interactive interface preferences.
+type UIConfig struct {
+	Theme string `yaml:"theme,omitempty"`
+}
+
+// FileMu serializes read-modify-write cycles on config files within this
+// process. Writers in other processes are not covered; the atomic rename in
+// Save keeps the file readable but the last writer still wins.
+var FileMu sync.Mutex
+
+// SaveTheme records the UI theme in the config at path. It edits only the
+// ui.theme key of the YAML document so comments and the rest of the file
+// survive.
+func SaveTheme(path, name string) error {
+	FileMu.Lock()
+	defer FileMu.Unlock()
+
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		cfg := Default()
+		cfg.UI.Theme = name
+		return Save(path, cfg)
+	}
+	if err != nil {
+		return err
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return fmt.Errorf("parse %s: %w", path, err)
+	}
+	if len(doc.Content) == 0 {
+		doc = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode}}}
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return fmt.Errorf("parse %s: top level is not a mapping", path)
+	}
+	ui := mappingChild(root, "ui")
+	if ui.Kind != yaml.MappingNode {
+		*ui = yaml.Node{Kind: yaml.MappingNode}
+	}
+	*mappingChild(ui, "theme") = yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: name}
+
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return err
+	}
+	return writeFile(path, out)
+}
+
+// mappingChild returns the value node for key in a YAML mapping, appending an
+// empty one when the key is missing.
+func mappingChild(mapping *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			return mapping.Content[i+1]
+		}
+	}
+	value := &yaml.Node{}
+	mapping.Content = append(mapping.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, value)
+	return value
 }
 
 // CommandConfig is a predefined command executed on the origin machine.
@@ -298,12 +364,16 @@ func LoadDefault() (Config, error) {
 // needed. The write goes to a temporary file in the same directory and is
 // renamed into place so a concurrent reader never sees a partial file.
 func Save(path string, cfg Config) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
+		return err
+	}
+	return writeFile(path, data)
+}
+
+func writeFile(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	tmp, err := os.CreateTemp(dir, ".config-*.yml")

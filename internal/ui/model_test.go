@@ -336,7 +336,7 @@ func TestRootMenuScopesTunnelSources(t *testing.T) {
 	originDeps := screenDeps{tunnelSource: originTunnel, tunnelController: fakeTunnelController{}}
 
 	// The Client menu's Tunnels entry uses the current session source.
-	clientMenu := newRootMenu(m.styles, clientDeps, originDeps, "1.2.3", "", true, m.setTheme)
+	clientMenu := newRootMenu(m.styles, clientDeps, originDeps, "1.2.3", "", true, m)
 	_, cmd := clientMenu.Update(press(tea.KeyEnter, ""))
 	action := run(t, cmd).(screen.ActionMsg)
 	clientTunnels := action.Screen
@@ -349,7 +349,7 @@ func TestRootMenuScopesTunnelSources(t *testing.T) {
 	}
 
 	// The Server menu's Tunnels entry uses the local origin source.
-	clientMenu = newRootMenu(m.styles, clientDeps, originDeps, "1.2.3", "", true, m.setTheme)
+	clientMenu = newRootMenu(m.styles, clientDeps, originDeps, "1.2.3", "", true, m)
 	clientMenu.Update(press(tea.KeyDown, ""))
 	clientMenu.Update(press(tea.KeyDown, ""))
 	_, cmd = clientMenu.Update(press(tea.KeyEnter, ""))
