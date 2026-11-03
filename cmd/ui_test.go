@@ -26,6 +26,11 @@ func TestUICommand(t *testing.T) {
 	if flag.DefValue != "" {
 		t.Fatalf("ui --theme default = %q, want empty", flag.DefValue)
 	}
+
+	rootFlag := rootCmd.Flags().Lookup("theme")
+	if rootFlag == nil {
+		t.Fatal("root --theme flag is not registered")
+	}
 }
 
 func TestUpdateAvailableVersion(t *testing.T) {
@@ -59,5 +64,11 @@ func TestUIHelp(t *testing.T) {
 	printHelp(&out, "sshex")
 	if !strings.Contains(out.String(), "ui                    Open the interactive terminal interface") {
 		t.Fatalf("root help is missing ui: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "Run without arguments to open the interactive terminal interface.") {
+		t.Fatalf("root help is missing the default UI hint: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "--theme <name>") {
+		t.Fatalf("root help is missing --theme: %q", out.String())
 	}
 }

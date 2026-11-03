@@ -23,7 +23,9 @@ func showBanner(cmd *cobra.Command) bool {
 		return false
 	}
 	if cmd == rootCmd {
-		return true
+		// A bare `sshex` opens the UI, which draws its own logo. The banner
+		// still precedes root help for unknown arguments or a piped invocation.
+		return !runsUI(cmd)
 	}
 	return cmd.Annotations[bannerAnnotation] == "true"
 }

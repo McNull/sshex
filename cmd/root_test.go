@@ -141,6 +141,38 @@ func TestCheckVersionSynchronouslyReportsFailure(t *testing.T) {
 	}
 }
 
+func TestRootWithoutArgumentsPrintsHelpWhenNotInteractive(t *testing.T) {
+	var out strings.Builder
+	rootCmd.SetOut(&out)
+	t.Cleanup(func() { rootCmd.SetOut(nil) })
+
+	if err := rootCmd.RunE(rootCmd, nil); err != nil {
+		t.Fatalf("root RunE() error: %v", err)
+	}
+	if !strings.Contains(out.String(), "Run without arguments to open the interactive terminal interface.") {
+		t.Fatalf("root help is missing the UI hint: %q", out.String())
+	}
+}
+
+func TestRootAllowsUnknownArguments(t *testing.T) {
+	if err := rootCmd.ValidateArgs([]string{"unknown"}); err != nil {
+		t.Fatalf("root ValidateArgs() error: %v", err)
+	}
+}
+
+func TestRootUnknownArgumentsPrintHelp(t *testing.T) {
+	var out strings.Builder
+	rootCmd.SetOut(&out)
+	t.Cleanup(func() { rootCmd.SetOut(nil) })
+
+	if err := rootCmd.RunE(rootCmd, []string{"unknown"}); err != nil {
+		t.Fatalf("root RunE() error: %v", err)
+	}
+	if !strings.Contains(out.String(), "Spawn ssh tunnels") {
+		t.Fatalf("root help = %q", out.String())
+	}
+}
+
 func TestRootHasExecAndCommand(t *testing.T) {
 	names := make(map[string]bool)
 	for _, c := range rootCmd.Commands() {

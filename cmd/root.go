@@ -37,11 +37,18 @@ func (e *ExitError) Error() string {
 var rootCmd = &cobra.Command{
 	Use:           "sshex",
 	Short:         "Spawn ssh tunnels and execute commands from a remote shell",
+	Args:          cobra.ArbitraryArgs,
 	SilenceUsage:  true,
 	SilenceErrors: true,
-	RunE: func(cmd *cobra.Command, _ []string) error {
-		printHelp(cmd.OutOrStdout(), "sshex")
-		return nil
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Unknown arguments keep the previous behavior of printing help. The
+		// UI also needs an interactive terminal, so a piped invocation falls
+		// back to help instead of failing.
+		if len(args) > 0 || !launchesUI(cmd) {
+			printHelp(cmd.OutOrStdout(), "sshex")
+			return nil
+		}
+		return runUI(cmd)
 	},
 }
 
@@ -135,7 +142,7 @@ func checkVersionState(cmd *cobra.Command) {
 	if err != nil {
 		return
 	}
-	if cmd != uiCmd && !bannerSuppressed() {
+	if !runsUI(cmd) && !bannerSuppressed() {
 		if available := cachedUpdateVersion(path); available != "" {
 			printUpdateAvailable(cmd.ErrOrStderr(), available)
 		}

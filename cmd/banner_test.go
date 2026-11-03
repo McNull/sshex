@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bytes"
+	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -37,6 +39,10 @@ func TestPrintBanner(t *testing.T) {
 }
 
 func TestShowBanner(t *testing.T) {
+	// A non-terminal output keeps the root command on the help path, where the
+	// banner still shows.
+	rootCmd.SetOut(&bytes.Buffer{})
+	t.Cleanup(func() { rootCmd.SetOut(nil) })
 	if !showBanner(rootCmd) {
 		t.Error("showBanner(rootCmd) = false, want true")
 	}
@@ -49,6 +55,25 @@ func TestShowBanner(t *testing.T) {
 	plain := &cobra.Command{}
 	if showBanner(plain) {
 		t.Error("showBanner(plain) = true, want false")
+	}
+}
+
+func TestShowBannerHiddenForDefaultUI(t *testing.T) {
+	in, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootCmd.SetIn(in)
+	orig := isTerminalWriter
+	isTerminalWriter = func(io.Writer) bool { return true }
+	t.Cleanup(func() {
+		rootCmd.SetIn(nil)
+		isTerminalWriter = orig
+		_ = in.Close()
+	})
+
+	if showBanner(rootCmd) {
+		t.Error("showBanner(rootCmd) = true when the UI opens, want false")
 	}
 }
 

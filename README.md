@@ -40,13 +40,15 @@ $ sshex exec code .
 
 ## Terminal UI
 
-`sshex ui` opens a full-screen terminal interface. Outside a session, the
-Server menu opens Connect, Sessions, Tunnels, Commands and Update. Inside an
-sshex session, the Client menu opens the current session's Tunnels and Commands,
-plus a Server entry that opens the Server menu. The default monochrome theme
-adapts to light and dark terminals and respects `NO_COLOR`.
+Running `sshex` without arguments opens the full-screen terminal interface, as
+does `sshex ui`. Outside a session, the Server menu opens Connect, Sessions,
+Tunnels, Commands and Update. Inside an sshex session, the Client menu opens the
+current session's Tunnels and Commands, plus a Server entry that opens the
+Server menu. The default monochrome theme adapts to light and dark terminals and
+respects `NO_COLOR`.
 
 ```sh
+$ sshex
 $ sshex ui
 ```
 

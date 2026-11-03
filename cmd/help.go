@@ -12,10 +12,14 @@ const rootHelp = `  Spawn ssh tunnels and execute commands from a remote shell.
 
   sshex [options] [<command>] [<args>]
 
+  Run without arguments to open the interactive terminal interface.
+
   Options:
     -h, --help            Show this help message and exit
     -v, --version         Show version information and exit
         --version-check   Perform online version check and exit
+        --theme <name>    Color theme for the interactive interface
+                          (default: mono)
 
   Commands:
     connect               Connect to a remote machine via ssh
