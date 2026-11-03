@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/mcnull/sshex/internal/control"
 	"github.com/mcnull/sshex/internal/model"
@@ -15,6 +16,10 @@ import (
 const (
 	DirMode    = 0o700
 	SocketMode = 0o600
+
+	// shutdownTimeout bounds how long a cancelled listener waits for in-flight
+	// requests to finish before their connections are closed.
+	shutdownTimeout = 5 * time.Second
 )
 
 type Provider struct {
@@ -63,15 +68,38 @@ func (l *Listener) Endpoint() model.Endpoint {
 
 func (l *Listener) Serve(ctx context.Context, handler http.Handler) error {
 	l.server = &http.Server{Handler: handler}
+	served := make(chan struct{})
+	shutdown := make(chan struct{})
 	go func() {
-		<-ctx.Done()
-		_ = l.Close()
+		defer close(shutdown)
+		select {
+		case <-ctx.Done():
+			l.shutdown()
+		case <-served:
+		}
 	}()
 	err := l.server.Serve(l.ln)
+	close(served)
 	if errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) {
+		// When the context cancelled the server, wait until the graceful
+		// shutdown has finished so that in-flight responses are written before
+		// Serve returns and the caller removes the socket.
+		<-shutdown
 		return nil
 	}
 	return err
+}
+
+// shutdown stops accepting connections and waits for in-flight requests to
+// finish, so a handler that triggers teardown still delivers its response.
+func (l *Listener) shutdown() {
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := l.server.Shutdown(ctx); err != nil {
+		_ = l.server.Close()
+	}
+	_ = l.ln.Close()
+	_ = os.Remove(l.path)
 }
 
 func (l *Listener) Close() error {

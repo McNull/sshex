@@ -74,8 +74,16 @@ type SessionService struct {
 	mu        sync.Mutex
 	handler   http.Handler
 	baseCtx   context.Context
-	listeners map[string]control.Listener
+	listeners map[string]*sessionListener
 	teardown  func()
+}
+
+// sessionListener owns the control listener of one session. stop cancels the
+// context that serves it, which shuts it down gracefully after in-flight
+// responses have been written.
+type sessionListener struct {
+	listener control.Listener
+	stop     context.CancelFunc
 }
 
 func NewSessionService(cfg SessionServiceConfig) *SessionService {
@@ -94,7 +102,7 @@ func NewSessionService(cfg SessionServiceConfig) *SessionService {
 		pool:        cfg.Pool,
 		sessionDir:  cfg.SessionDir,
 		controlDir:  cfg.ControlDir,
-		listeners:   make(map[string]control.Listener),
+		listeners:   make(map[string]*sessionListener),
 	}
 	s.heartbeat = NewHeartbeatMonitor(cfg.HeartbeatInterval, cfg.HeartbeatTimeout, time.Now, func(connectionID string) {
 		s.expireConnection(context.Background(), connectionID)
@@ -313,7 +321,8 @@ func (s *SessionService) createSession(ctx context.Context, target sshx.Target, 
 	s.auth.Register(token, localCaps, "")
 	s.auth.Register(remoteToken, remoteCaps, "")
 	s.pool.SetController(id, conn)
-	s.setListener(id, listener)
+	listenCtx, stopListener := context.WithCancel(s.serveContext())
+	s.setListener(id, &sessionListener{listener: listener, stop: stopListener})
 
 	s.mu.Lock()
 	handler := s.handler
@@ -321,7 +330,7 @@ func (s *SessionService) createSession(ctx context.Context, target sshx.Target, 
 	if handler == nil {
 		handler = http.NotFoundHandler()
 	}
-	go func() { _ = listener.Serve(s.serveContext(), handler) }()
+	go func() { _ = listener.Serve(listenCtx, handler) }()
 
 	return session, nil
 }
@@ -621,9 +630,11 @@ func (s *SessionService) closeSession(ctx context.Context, session model.Session
 	}
 	_ = s.connections.DeleteBySession(ctx, session.ID)
 
-	if listener, ok := s.listener(session.ID); ok {
-		_ = listener.Close()
+	if l, ok := s.listener(session.ID); ok {
 		s.removeListener(session.ID)
+		// Cancel rather than close: the handler that is destroying the session
+		// may still be writing its response on this listener.
+		l.stop()
 	}
 
 	s.auth.Revoke(session.Token)
@@ -642,13 +653,13 @@ func (s *SessionService) closeSession(ctx context.Context, session model.Session
 	return dropped, nil
 }
 
-func (s *SessionService) setListener(id string, listener control.Listener) {
+func (s *SessionService) setListener(id string, listener *sessionListener) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.listeners[id] = listener
 }
 
-func (s *SessionService) listener(id string) (control.Listener, bool) {
+func (s *SessionService) listener(id string) (*sessionListener, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	listener, ok := s.listeners[id]

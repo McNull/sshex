@@ -34,6 +34,54 @@ func TestSessionServiceCloseMissing(t *testing.T) {
 	}
 }
 
+type fakeControlListener struct {
+	endpoint model.Endpoint
+	served   chan struct{}
+	closed   bool
+}
+
+func (f *fakeControlListener) Endpoint() model.Endpoint { return f.endpoint }
+
+func (f *fakeControlListener) Serve(ctx context.Context, _ http.Handler) error {
+	<-ctx.Done()
+	close(f.served)
+	return nil
+}
+
+func (f *fakeControlListener) Close() error {
+	f.closed = true
+	return nil
+}
+
+func TestCloseSessionStopsListenerGracefully(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestServices()
+	if err := svc.sessionRepo.Create(ctx, model.Session{ID: "s1", Host: "h", State: model.SessionActive}); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+
+	listenCtx, stop := context.WithCancel(context.Background())
+	listener := &fakeControlListener{served: make(chan struct{})}
+	svc.sessions.setListener("s1", &sessionListener{listener: listener, stop: stop})
+	go func() { _ = listener.Serve(listenCtx, nil) }()
+
+	if _, _, err := svc.sessions.Close(ctx, "s1"); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+
+	select {
+	case <-listener.served:
+	case <-time.After(time.Second):
+		t.Fatal("session close did not cancel the listener")
+	}
+	if listener.closed {
+		t.Fatal("session close force-closed the listener instead of shutting it down")
+	}
+	if _, ok := svc.sessions.listener("s1"); ok {
+		t.Fatal("listener still registered after close")
+	}
+}
+
 func TestSessionServiceListAndGet(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestServices()
