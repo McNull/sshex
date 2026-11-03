@@ -31,6 +31,12 @@ func (m *Model) Resize(width int) {
 	m.width = width
 }
 
+// SetIdentity replaces the origin and client labels shown on the right.
+func (m *Model) SetIdentity(origin, client string) {
+	m.origin = origin
+	m.client = client
+}
+
 // Height is the number of terminal rows the header occupies.
 func (m Model) Height() int {
 	return 2

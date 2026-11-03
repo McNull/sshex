@@ -102,6 +102,12 @@ type Model struct {
 	stack     *screen.Stack
 	width     int
 	height    int
+	inSession bool
+	// clientOrigin and clientTarget identify the current outer session. The
+	// local origin identifies the machine running the UI.
+	clientOrigin string
+	clientTarget string
+	localOrigin  string
 	// quitErr is the failure reported by the screen that asked the UI to quit.
 	quitErr error
 }
@@ -119,6 +125,38 @@ func New(opts ModelOptions) *Model {
 	})
 	styles := theme.NewStyles(resolved)
 
+	inSession := insideSession()
+	clientDeps := resolveScreenDeps(opts, scopeClient)
+	originDeps := resolveScreenDeps(opts, scopeOrigin)
+
+	m := &Model{
+		styles:       &styles,
+		themeName:    resolved.Name,
+		noColor:      resolved.NoColor,
+		global:       keys.DefaultGlobal(),
+		header:       header.New(&styles, opts.Version, origin, client),
+		footer:       footer.New(&styles),
+		help:         help.New(&styles),
+		inSession:    inSession,
+		clientOrigin: origin,
+		clientTarget: client,
+		localOrigin:  config.Origin(),
+		stack: screen.NewStack(newRootMenu(
+			&styles,
+			clientDeps,
+			originDeps,
+			opts.Version,
+			opts.UpdateAvailable,
+			inSession,
+		)),
+	}
+	m.refreshHeader()
+	return m
+}
+
+// resolveScreenDeps builds one set of screens for a scope. Injected sources
+// override both scopes; production defaults are scoped adapters.
+func resolveScreenDeps(opts ModelOptions, scope controlScope) screenDeps {
 	source := opts.HostSource
 	if source == nil {
 		source = sshHostSource{}
@@ -131,7 +169,7 @@ func New(opts ModelOptions) *Model {
 	sessionSource := opts.SessionSource
 	sessionCloser := opts.SessionCloser
 	if sessionSource == nil || sessionCloser == nil {
-		control := sessionControl{}
+		control := sessionControl{scope: scope}
 		if sessionSource == nil {
 			sessionSource = control
 		}
@@ -143,7 +181,7 @@ func New(opts ModelOptions) *Model {
 	tunnelSource := opts.TunnelSource
 	tunnelController := opts.TunnelController
 	if tunnelSource == nil || tunnelController == nil {
-		control := tunnelControl{}
+		control := tunnelControl{scope: scope}
 		if tunnelSource == nil {
 			tunnelSource = control
 		}
@@ -154,13 +192,13 @@ func New(opts ModelOptions) *Model {
 
 	portSource := opts.PortSource
 	if portSource == nil {
-		portSource = portControl{}
+		portSource = portControl{scope: scope}
 	}
 
 	commandSource := opts.CommandSource
 	commandController := opts.CommandController
 	if commandSource == nil || commandController == nil {
-		control := commandControl{}
+		control := commandControl{scope: scope}
 		if commandSource == nil {
 			commandSource = control
 		}
@@ -185,36 +223,32 @@ func New(opts ModelOptions) *Model {
 		}
 	}
 
-	m := &Model{
-		styles:    &styles,
-		themeName: resolved.Name,
-		noColor:   resolved.NoColor,
-		global:    keys.DefaultGlobal(),
-		header:    header.New(&styles, opts.Version, origin, client),
-		footer:    footer.New(&styles),
-		help:      help.New(&styles),
-		stack: screen.NewStack(newRootMenu(
-			&styles,
-			screenDeps{
-				connectSource:     source,
-				connectRunner:     runner,
-				sessionSource:     sessionSource,
-				sessionCloser:     sessionCloser,
-				tunnelSource:      tunnelSource,
-				tunnelController:  tunnelController,
-				portSource:        portSource,
-				commandSource:     commandSource,
-				commandController: commandController,
-				updateSource:      updateSource,
-				updateChecker:     updateChecker,
-				updateInstaller:   updateInstaller,
-			},
-			opts.Version,
-			opts.UpdateAvailable,
-			insideSession(),
-		)),
+	return screenDeps{
+		connectSource:     source,
+		connectRunner:     runner,
+		sessionSource:     sessionSource,
+		sessionCloser:     sessionCloser,
+		tunnelSource:      tunnelSource,
+		tunnelController:  tunnelController,
+		portSource:        portSource,
+		commandSource:     commandSource,
+		commandController: commandController,
+		updateSource:      updateSource,
+		updateChecker:     updateChecker,
+		updateInstaller:   updateInstaller,
 	}
-	return m
+}
+
+// refreshHeader matches the header identity to the active screen's scope.
+func (m *Model) refreshHeader() {
+	if !m.inSession {
+		return
+	}
+	if m.stack.Scope() == screen.ScopeClient {
+		m.header.SetIdentity(m.clientOrigin, m.clientTarget)
+		return
+	}
+	m.header.SetIdentity(m.localOrigin, "")
 }
 
 func headerIdentity(origin, client string) (string, string) {
@@ -283,6 +317,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	top := m.stack.Top()
 	updated, cmd := top.Update(msg)
 	m.stack.ReplaceTop(updated)
+	m.refreshHeader()
 	return m, cmd
 }
 
@@ -338,11 +373,13 @@ func (m *Model) apply(action screen.ActionMsg) tea.Cmd {
 		width, height := m.contentSize()
 		action.Screen.Resize(width, height)
 		m.stack.Push(action.Screen)
+		m.refreshHeader()
 		return action.Screen.Init()
 	case screen.ActionPop:
 		if _, ok := m.stack.Pop(); !ok {
 			return nil
 		}
+		m.refreshHeader()
 		width, height := m.contentSize()
 		top := m.stack.Top()
 		top.Resize(width, height)
@@ -357,6 +394,7 @@ func (m *Model) apply(action screen.ActionMsg) tea.Cmd {
 		width, height := m.contentSize()
 		action.Screen.Resize(width, height)
 		m.stack.ReplaceTop(action.Screen)
+		m.refreshHeader()
 		return action.Screen.Init()
 	case screen.ActionQuit:
 		m.quitErr = action.Err
@@ -414,8 +452,17 @@ func currentSessionTarget() string {
 
 // newRootMenu builds the menus and the screens they share. Outside a session
 // the Server menu is the root. Inside a session the Client menu is the root and
-// its Server entry pushes the same Server menu above it.
-func newRootMenu(styles *theme.Styles, deps screenDeps, version, updateAvailable string, inSession bool) screen.Screen {
+// its Server entry pushes a Server menu scoped to the local origin.
+func newRootMenu(styles *theme.Styles, clientDeps, originDeps screenDeps, version, updateAvailable string, inSession bool) screen.Screen {
+	serverMenu := newServerMenu(styles, originDeps, version, updateAvailable, inSession)
+	if !inSession {
+		return serverMenu
+	}
+	return newClientMenu(styles, clientDeps, serverMenu, version, updateAvailable)
+}
+
+// newServerMenu builds the screens that manage the machine running the UI.
+func newServerMenu(styles *theme.Styles, deps screenDeps, version, updateAvailable string, nested bool) screen.Screen {
 	// Keep one Connect screen for the lifetime of the UI so its query,
 	// selection and scroll position survive a trip back to the menu.
 	connectScreen := connect.New(connect.Options{
@@ -481,24 +528,7 @@ func newRootMenu(styles *theme.Styles, deps screenDeps, version, updateAvailable
 		TunnelOpener: openSessionTunnels,
 	})
 
-	// The list owns the current command set; the composition root builds the
-	// add/edit form and receives that set for uniqueness checks.
-	newCommandForm := func(opts commandscreen.FormOptions) screen.Screen {
-		opts.Styles = styles
-		opts.Controller = deps.commandController
-		return commandscreen.NewForm(opts)
-	}
-	commandsScreen := commandscreen.New(commandscreen.Options{
-		Styles:     styles,
-		Source:     deps.commandSource,
-		Controller: deps.commandController,
-		AddOpener: func(existing []commandscreen.Command) screen.Screen {
-			return newCommandForm(commandscreen.FormOptions{Existing: existing})
-		},
-		EditOpener: func(existing []commandscreen.Command, original commandscreen.Command) screen.Screen {
-			return newCommandForm(commandscreen.FormOptions{Existing: existing, Original: &original})
-		},
-	})
+	commandsScreen := newCommandsScreen(styles, deps)
 
 	// Keep one Update screen so a dismissed prompt is not recreated by a trip
 	// back to the menu. It still reloads and checks on every visit.
@@ -509,7 +539,7 @@ func newRootMenu(styles *theme.Styles, deps screenDeps, version, updateAvailable
 		Installer: deps.updateInstaller,
 	})
 
-	serverMenu := menu.New(menu.Options{
+	return menu.New(menu.Options{
 		Items: []menu.Item{
 			{
 				Kind:        "connect",
@@ -547,21 +577,42 @@ func newRootMenu(styles *theme.Styles, deps screenDeps, version, updateAvailable
 		Styles:          styles,
 		Title:           "Server menu",
 		Help:            "Choose a section to manage SSH connections and settings.",
-		Nested:          inSession,
+		Nested:          nested,
+		Scope:           screen.ScopeOrigin,
 	})
-	if !inSession {
-		return serverMenu
-	}
+}
 
+// newClientMenu builds the screens that manage the current outer session.
+func newClientMenu(styles *theme.Styles, deps screenDeps, serverMenu screen.Screen, version, updateAvailable string) screen.Screen {
 	sessionID := currentRemoteSessionID()
 	target := currentSessionTarget()
+
+	newAddForm := func() screen.Screen {
+		return tunnelscreen.NewAddForm(tunnelscreen.AddFormOptions{
+			Styles:     styles,
+			Controller: deps.tunnelController,
+			PortSource: deps.portSource,
+			SessionID:  sessionID,
+			Target:     target,
+		})
+	}
+	tunnelsScreen := tunnelscreen.New(tunnelscreen.Options{
+		Styles:     styles,
+		Source:     deps.tunnelSource,
+		Controller: deps.tunnelController,
+		SessionID:  sessionID,
+		Target:     target,
+		AddOpener:  newAddForm,
+	})
+	commandsScreen := newCommandsScreen(styles, deps)
+
 	return menu.New(menu.Options{
 		Items: []menu.Item{
 			{
 				Kind:        "tunnels",
 				Title:       "Tunnels",
 				Description: "Manage this session's port forwards",
-				Open:        func() screen.Screen { return openSessionTunnels(sessionID, target) },
+				Open:        func() screen.Screen { return tunnelsScreen },
 			},
 			{
 				Kind:        "commands",
@@ -581,5 +632,25 @@ func newRootMenu(styles *theme.Styles, deps screenDeps, version, updateAvailable
 		Styles:          styles,
 		Title:           "Client menu",
 		Help:            "Manage the current session or open the server menu.",
+		Scope:           screen.ScopeClient,
+	})
+}
+
+func newCommandsScreen(styles *theme.Styles, deps screenDeps) screen.Screen {
+	newCommandForm := func(opts commandscreen.FormOptions) screen.Screen {
+		opts.Styles = styles
+		opts.Controller = deps.commandController
+		return commandscreen.NewForm(opts)
+	}
+	return commandscreen.New(commandscreen.Options{
+		Styles:     styles,
+		Source:     deps.commandSource,
+		Controller: deps.commandController,
+		AddOpener: func(existing []commandscreen.Command) screen.Screen {
+			return newCommandForm(commandscreen.FormOptions{Existing: existing})
+		},
+		EditOpener: func(existing []commandscreen.Command, original commandscreen.Command) screen.Screen {
+			return newCommandForm(commandscreen.FormOptions{Existing: existing, Original: &original})
+		},
 	})
 }

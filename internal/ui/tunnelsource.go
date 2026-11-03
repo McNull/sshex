@@ -14,14 +14,16 @@ import (
 // tunnelControl adapts the live broker client for the Tunnels screen. The
 // screen only sees its own narrow Source and Controller interfaces, so tests
 // never touch the daemon or the session files.
-type tunnelControl struct{}
+type tunnelControl struct {
+	scope controlScope
+}
 
 // List implements tunnels.Source. An empty session ID lists every session.
-func (tunnelControl) List(sessionID string) (tunnels.Snapshot, error) {
+func (c tunnelControl) List(sessionID string) (tunnels.Snapshot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), sessionRequestTimeout)
 	defer cancel()
 
-	c, err := controlSessionClient()
+	broker, err := controlSessionClient(c.scope)
 	if err != nil {
 		if errors.Is(err, sessionfile.ErrNone) {
 			return tunnels.Snapshot{}, nil
@@ -30,21 +32,21 @@ func (tunnelControl) List(sessionID string) (tunnels.Snapshot, error) {
 	}
 
 	if sessionID != "" {
-		return listSessionTunnels(ctx, c, sessionID)
+		return listSessionTunnels(ctx, broker, sessionID)
 	}
-	return listAllSessionTunnels(ctx, c)
+	return listAllSessionTunnels(ctx, broker)
 }
 
 // Add implements tunnels.Controller.
-func (tunnelControl) Add(sessionID string, req tunnels.AddRequest) (tunnels.Tunnel, error) {
+func (c tunnelControl) Add(sessionID string, req tunnels.AddRequest) (tunnels.Tunnel, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), sessionRequestTimeout)
 	defer cancel()
 
-	c, err := controlSessionClient()
+	broker, err := controlSessionClient(c.scope)
 	if err != nil {
 		return tunnels.Tunnel{}, err
 	}
-	added, err := c.ForSession(sessionID).AddTunnel(
+	added, err := broker.ForSession(sessionID).AddTunnel(
 		ctx,
 		req.LocalPort,
 		req.TargetHost,
@@ -58,15 +60,15 @@ func (tunnelControl) Add(sessionID string, req tunnels.AddRequest) (tunnels.Tunn
 }
 
 // Remove implements tunnels.Controller.
-func (tunnelControl) Remove(sessionID, tunnelID string) error {
+func (c tunnelControl) Remove(sessionID, tunnelID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), sessionRequestTimeout)
 	defer cancel()
 
-	c, err := controlSessionClient()
+	broker, err := controlSessionClient(c.scope)
 	if err != nil {
 		return err
 	}
-	return c.ForSession(sessionID).RemoveTunnelByID(ctx, tunnelID)
+	return broker.ForSession(sessionID).RemoveTunnelByID(ctx, tunnelID)
 }
 
 func listSessionTunnels(ctx context.Context, c *client.Client, sessionID string) (tunnels.Snapshot, error) {

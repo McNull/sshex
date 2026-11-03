@@ -41,49 +41,58 @@ func liveSession(t *testing.T, runtimeDir, id, target string) {
 	}
 }
 
-func TestSelectClientResolution(t *testing.T) {
+func TestScopeClientResolution(t *testing.T) {
 	runtimeDir := t.TempDir()
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	t.Setenv("SSHEX_HOME", t.TempDir())
 	t.Setenv("SSHEX_SESSION", "")
 	liveSession(t, runtimeDir, "s1", "bob@ssh01")
 
-	c, err := selectClient("")
+	c, err := scopeOrigin.sessionClient("")
 	if err != nil {
-		t.Fatalf("selectClient(\"\") error: %v", err)
+		t.Fatalf("origin sessionClient(\"\") error: %v", err)
 	}
 	if c.SessionID() != "s1" {
-		t.Fatalf("selectClient(\"\") id = %q, want s1", c.SessionID())
+		t.Fatalf("origin sessionClient(\"\") id = %q, want s1", c.SessionID())
 	}
 
-	c, err = selectClient("other")
+	c, err = scopeOrigin.sessionClient("other")
 	if err != nil {
-		t.Fatalf("selectClient(other) error: %v", err)
+		t.Fatalf("origin sessionClient(other) error: %v", err)
 	}
 	if c.SessionID() != "other" {
-		t.Fatalf("selectClient(other) id = %q, want other", c.SessionID())
+		t.Fatalf("origin sessionClient(other) id = %q, want other", c.SessionID())
 	}
 
+	if _, err := scopeClient.sessionClient(""); err == nil {
+		t.Fatal("client sessionClient(\"\") without SSHEX_SESSION error = nil")
+	}
+
+	t.Setenv("SSHEX_SESSION", "s1")
+	c, err = scopeClient.sessionClient("")
+	if err != nil {
+		t.Fatalf("client sessionClient(\"\") error: %v", err)
+	}
+	if c.SessionID() != "s1" {
+		t.Fatalf("client sessionClient(\"\") id = %q, want s1", c.SessionID())
+	}
+
+	// The origin scope keeps working when multiple local sessions exist; any
+	// live local session can address the local broker.
 	liveSession(t, runtimeDir, "s2", "bob@ssh01")
-	if _, err := selectClient(""); err == nil {
-		t.Fatal("selectClient(\"\") with two sessions error = nil, want ambiguity error")
-	}
-	if _, err := selectTunnelClient(""); err == nil || !strings.Contains(err.Error(), "specify --session <id>") {
-		t.Fatalf("selectTunnelClient(\"\") error = %v, want explicit session guidance", err)
-	}
-	c, err = selectClient("s2")
+	c, err = scopeOrigin.sessionClient("")
 	if err != nil {
-		t.Fatalf("selectClient(s2) error: %v", err)
+		t.Fatalf("origin sessionClient(\"\") with two sessions error: %v", err)
+	}
+	if c.SessionID() != "s1" && c.SessionID() != "s2" {
+		t.Fatalf("origin sessionClient(\"\") id = %q, want a local session", c.SessionID())
+	}
+	c, err = scopeOrigin.sessionClient("s2")
+	if err != nil {
+		t.Fatalf("origin sessionClient(s2) error: %v", err)
 	}
 	if c.SessionID() != "s2" {
-		t.Fatalf("selectClient(s2) id = %q, want s2", c.SessionID())
-	}
-	c, err = selectTunnelClient("s2")
-	if err != nil {
-		t.Fatalf("selectTunnelClient(s2) error: %v", err)
-	}
-	if c.SessionID() != "s2" {
-		t.Fatalf("selectTunnelClient(s2) id = %q, want s2", c.SessionID())
+		t.Fatalf("origin sessionClient(s2) id = %q, want s2", c.SessionID())
 	}
 }
 

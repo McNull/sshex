@@ -39,7 +39,7 @@ var tunnelAddCmd = &cobra.Command{
 			return err
 		}
 		sessionID, _ := cmd.Flags().GetString("session")
-		c, err := selectTunnelClient(sessionID)
+		c, err := scopeFromFlags(cmd).mutationClient(sessionID)
 		if err != nil {
 			return err
 		}
@@ -76,7 +76,7 @@ var tunnelRmCmd = &cobra.Command{
 			return err
 		}
 		sessionID, _ := cmd.Flags().GetString("session")
-		c, err := selectTunnelClient(sessionID)
+		c, err := scopeFromFlags(cmd).mutationClient(sessionID)
 		if err != nil {
 			return err
 		}
@@ -110,10 +110,11 @@ var tunnelListCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		all, _ := cmd.Flags().GetBool("all")
 		sessionID, _ := cmd.Flags().GetString("session")
-		if shouldListAllTunnels(all, sessionID, currentSessionID()) {
-			return listAllTunnels(cmd)
+		scope := scopeFromFlags(cmd)
+		if shouldListAllTunnels(all, sessionID, scope, currentSessionID()) {
+			return listAllTunnels(cmd, scope)
 		}
-		c, err := selectClient(sessionID)
+		c, err := scope.sessionClient(sessionID)
 		if err != nil {
 			return err
 		}
@@ -140,8 +141,10 @@ var tunnelListCmd = &cobra.Command{
 	},
 }
 
-func shouldListAllTunnels(all bool, sessionID, remoteSessionID string) bool {
-	return all || (sessionID == "" && remoteSessionID == "")
+// shouldListAllTunnels defaults origin scope to every local session and client
+// scope to the current session, unless a session is named explicitly.
+func shouldListAllTunnels(all bool, sessionID string, scope controlScope, remoteSessionID string) bool {
+	return all || (sessionID == "" && (scope == scopeOrigin || remoteSessionID == ""))
 }
 
 var tunnelHelpCmd = &cobra.Command{
@@ -156,64 +159,6 @@ var tunnelHelpCmd = &cobra.Command{
 		printHelp(cmd.OutOrStdout(), target.CommandPath())
 		return nil
 	},
-}
-
-func discoverClient() (*client.Client, error) {
-	file, err := sessionfile.Discover()
-	if err != nil {
-		return nil, err
-	}
-	return client.New(file), nil
-}
-
-// controlFile returns a live session file for some session, preferring the
-// default one. The broker's token authorizes every session of the origin, so any
-// live session file is enough to reach it.
-func controlFile() (sessionfile.File, error) {
-	file, err := sessionfile.Discover()
-	if err == nil {
-		return file, nil
-	}
-	if errors.Is(err, sessionfile.ErrAmbiguous) {
-		active, listErr := sessionfile.ListActive()
-		if listErr == nil && len(active) > 0 {
-			return active[0], nil
-		}
-	}
-	return sessionfile.File{}, err
-}
-
-// controlClient returns a client for some live session, preferring the default
-// one.
-func controlClient() (*client.Client, error) {
-	file, err := controlFile()
-	if err != nil {
-		return nil, err
-	}
-	return client.New(file), nil
-}
-
-// selectClient resolves a client for an explicit session id, or the default
-// session when the id is empty.
-func selectClient(sessionID string) (*client.Client, error) {
-	if sessionID == "" {
-		return discoverClient()
-	}
-	c, err := controlClient()
-	if err != nil {
-		return nil, err
-	}
-	return c.ForSession(sessionID), nil
-}
-
-// selectTunnelClient resolves the session for tunnel mutations and turns an
-// ambiguous origin selection into guidance to choose a session explicitly.
-func selectTunnelClient(sessionID string) (*client.Client, error) {
-	c, err := selectClient(sessionID)
-	if errors.Is(err, sessionfile.ErrAmbiguous) && sessionID == "" && currentSessionID() == "" {
-		return nil, fmt.Errorf("multiple active sshex sessions; specify --session <id> (see `sshex session list`)")
-	}
-	return c, err
 }
 
 // sessionTarget returns the display target for the selected session.
@@ -231,10 +176,10 @@ func sessionTarget(cmd *cobra.Command, c *client.Client, sessionID string) strin
 	return session.Host
 }
 
-func listAllTunnels(cmd *cobra.Command) error {
-	c, err := controlClient()
+func listAllTunnels(cmd *cobra.Command, scope controlScope) error {
+	c, err := scope.client()
 	if err != nil {
-		if errors.Is(err, sessionfile.ErrNone) && currentSessionID() == "" {
+		if errors.Is(err, sessionfile.ErrNone) && scope == scopeOrigin {
 			fmt.Fprintln(cmd.OutOrStdout(), "No active sessions.")
 			return nil
 		}
@@ -303,14 +248,30 @@ func formatTunnel(direction model.ForwardDirection, localPort int, targetHost st
 	return line
 }
 
-func completeSessionIDs(_ *cobra.Command, _ []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
-	c, err := controlClient()
+func completeSessionIDs(cmd *cobra.Command, _ []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	return completeSessionIDsForScope(scopeFromFlags(cmd))
+}
+
+func completeAutoSessionIDs(_ *cobra.Command, _ []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	c, err := autoClient()
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	sessions, err := c.ListSessions(context.Background())
+	return sessionIDCompletions(c), cobra.ShellCompDirectiveNoFileComp
+}
+
+func completeSessionIDsForScope(scope controlScope) ([]cobra.Completion, cobra.ShellCompDirective) {
+	c, err := scope.client()
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return sessionIDCompletions(c), cobra.ShellCompDirectiveNoFileComp
+}
+
+func sessionIDCompletions(c *client.Client) []cobra.Completion {
+	sessions, err := c.ListSessions(context.Background())
+	if err != nil {
+		return nil
 	}
 	comps := make([]cobra.Completion, 0, len(sessions))
 	for _, s := range sessions {
@@ -323,13 +284,14 @@ func completeSessionIDs(_ *cobra.Command, _ []string, _ string) ([]cobra.Complet
 		}
 		comps = append(comps, cobra.CompletionWithDesc(s.ID, desc))
 	}
-	return comps, cobra.ShellCompDirectiveNoFileComp
+	return comps
 }
 
 func completeTunnelIDs(cmd *cobra.Command, _ []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	scope := scopeFromFlags(cmd)
 	sessionID, _ := cmd.Flags().GetString("session")
-	if shouldListAllTunnels(false, sessionID, currentSessionID()) {
-		c, err := controlClient()
+	if shouldListAllTunnels(false, sessionID, scope, currentSessionID()) {
+		c, err := scope.client()
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
@@ -348,7 +310,7 @@ func completeTunnelIDs(cmd *cobra.Command, _ []string, _ string) ([]cobra.Comple
 		return tunnelIDCompletions(tunnels, sessions), cobra.ShellCompDirectiveNoFileComp
 	}
 
-	c, err := selectClient(sessionID)
+	c, err := scope.sessionClient(sessionID)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -406,6 +368,7 @@ func tunnelDirection(cmd *cobra.Command, fallback model.ForwardDirection) (model
 }
 
 func init() {
+	tunnelCmd.PersistentFlags().Bool("client", false, "Use the current sshex session's origin instead of the local machine")
 	tunnelAddCmd.Flags().BoolP("local", "L", false, "Create a local forward (default)")
 	tunnelAddCmd.Flags().BoolP("remote", "R", false, "Create a remote forward")
 	tunnelAddCmd.Flags().StringP("session", "s", "", "Target a specific session id (required when multiple sessions are active)")

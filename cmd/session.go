@@ -31,9 +31,10 @@ var sessionListCmd = &cobra.Command{
 	Short: "List active sshex sessions",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		c, err := controlClient()
+		scope := scopeFromFlags(cmd)
+		c, err := scope.client()
 		if err != nil {
-			if errors.Is(err, sessionfile.ErrNone) && currentSessionID() == "" {
+			if errors.Is(err, sessionfile.ErrNone) && scope == scopeOrigin {
 				fmt.Fprintln(cmd.OutOrStdout(), "No active sessions.")
 				return nil
 			}
@@ -51,7 +52,11 @@ var sessionListCmd = &cobra.Command{
 		for i, s := range sessions {
 			hops[i] = sessionHopsLabel(cmd.Context(), s)
 		}
-		renderSessions(cmd.OutOrStdout(), sessions, currentSessionID(), hops)
+		current := ""
+		if scope == scopeClient {
+			current = currentSessionID()
+		}
+		renderSessions(cmd.OutOrStdout(), sessions, current, hops)
 		return nil
 	},
 }
@@ -62,7 +67,7 @@ var sessionCloseCmd = &cobra.Command{
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: completeSessionIDs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := controlClient()
+		c, err := scopeFromFlags(cmd).sessionClient(args[0])
 		if err != nil {
 			return err
 		}
@@ -163,5 +168,6 @@ var sessionHelpCmd = &cobra.Command{
 }
 
 func init() {
+	sessionCmd.PersistentFlags().Bool("client", false, "Use the current sshex session's origin instead of the local machine")
 	sessionCmd.AddCommand(sessionListCmd, sessionCloseCmd, sessionHelpCmd)
 }

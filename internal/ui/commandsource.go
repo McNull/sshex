@@ -16,16 +16,19 @@ import (
 // commandControl adapts the live broker or the local config for the Commands
 // screen. The screen only sees its own narrow Source and Controller interfaces,
 // so tests never touch the daemon or the config file.
-type commandControl struct{}
+type commandControl struct {
+	scope controlScope
+}
 
-// List implements commands.Source. Commands are owned by the origin: a live
-// session is used when one is discoverable, and the local config otherwise.
-// The returned Editable flag mirrors the CLI's capability check.
-func (commandControl) List() (commands.Snapshot, error) {
+// List implements commands.Source. Commands are owned by the origin: origin
+// scope manages this machine's config, while client scope reads the current
+// session's outer origin through its broker. The returned Editable flag mirrors
+// the CLI's capability check.
+func (c commandControl) List() (commands.Snapshot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), sessionRequestTimeout)
 	defer cancel()
 
-	store, err := resolveCommandStore()
+	store, err := resolveCommandStore(c.scope)
 	if err != nil {
 		return commands.Snapshot{}, err
 	}
@@ -37,11 +40,11 @@ func (commandControl) List() (commands.Snapshot, error) {
 }
 
 // Add implements commands.Controller.
-func (commandControl) Add(command commands.Command) error {
+func (c commandControl) Add(command commands.Command) error {
 	ctx, cancel := context.WithTimeout(context.Background(), sessionRequestTimeout)
 	defer cancel()
 
-	store, err := resolveCommandStore()
+	store, err := resolveCommandStore(c.scope)
 	if err != nil {
 		return err
 	}
@@ -53,11 +56,11 @@ func (commandControl) Add(command commands.Command) error {
 
 // Update implements commands.Controller. name is the current name, so a rename
 // is expressed by command.Name differing from it.
-func (commandControl) Update(name string, command commands.Command) error {
+func (c commandControl) Update(name string, command commands.Command) error {
 	ctx, cancel := context.WithTimeout(context.Background(), sessionRequestTimeout)
 	defer cancel()
 
-	store, err := resolveCommandStore()
+	store, err := resolveCommandStore(c.scope)
 	if err != nil {
 		return err
 	}
@@ -73,11 +76,11 @@ func (commandControl) Update(name string, command commands.Command) error {
 }
 
 // Remove implements commands.Controller.
-func (commandControl) Remove(name string) error {
+func (c commandControl) Remove(name string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), sessionRequestTimeout)
 	defer cancel()
 
-	store, err := resolveCommandStore()
+	store, err := resolveCommandStore(c.scope)
 	if err != nil {
 		return err
 	}
@@ -88,11 +91,11 @@ func (commandControl) Remove(name string) error {
 }
 
 // SetDisabled implements commands.Controller.
-func (commandControl) SetDisabled(name string, disabled bool) error {
+func (c commandControl) SetDisabled(name string, disabled bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), sessionRequestTimeout)
 	defer cancel()
 
-	store, err := resolveCommandStore()
+	store, err := resolveCommandStore(c.scope)
 	if err != nil {
 		return err
 	}
@@ -114,16 +117,20 @@ type commandStore interface {
 	CanManage() bool
 }
 
-// resolveCommandStore prefers the broker when a live session is discoverable so
-// commands reflect the origin; otherwise it edits the local config directly,
-// the same rule as the CLI.
-func resolveCommandStore() (commandStore, error) {
-	file, err := controlSessionFile()
+// resolveCommandStore uses the broker of the selected scope when one is
+// discoverable. Origin scope falls back to the local config directly; client
+// scope must have a current session and stays read-only without the commands
+// capability.
+func resolveCommandStore(scope controlScope) (commandStore, error) {
+	file, err := controlSessionFile(scope)
 	if err == nil {
 		return remoteCommandStore{
 			broker:    client.New(file),
 			canManage: file.Capabilities.Contains(model.CapabilityCommands),
 		}, nil
+	}
+	if scope == scopeClient {
+		return nil, err
 	}
 	path, err := config.Resolve("")
 	if err != nil {

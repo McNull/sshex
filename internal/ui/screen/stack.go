@@ -48,3 +48,13 @@ func (s *Stack) ReplaceTop(updated Screen) {
 func (s *Stack) Len() int {
 	return len(s.items)
 }
+
+// Scope reports the scope of the nearest scoped screen from the top down.
+func (s *Stack) Scope() Scope {
+	for i := len(s.items) - 1; i >= 0; i-- {
+		if scoped, ok := s.items[i].(Scoped); ok {
+			return scoped.Scope()
+		}
+	}
+	return ScopeOrigin
+}

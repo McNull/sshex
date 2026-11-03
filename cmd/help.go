@@ -96,6 +96,8 @@ const tunnelHelp = `  Manage ssh tunnels.
     help                  Show this help message and exit
 
   Options:
+        --client          Use the current sshex session's origin instead of the
+                          local machine
     -h, --help            Show this help message and exit
 `
 
@@ -111,8 +113,10 @@ const tunnelAddHelp = `  Add a new ssh tunnel.
     -R, --remote          Create a remote forward. The remote machine listens on
                           <port> and forwards to <target>:<remote-port> on the
                           local machine.
-    -s, --session <id>    Target a specific session id instead of this shell's
-                          session (required when multiple sessions are active).
+        --client          Use the current sshex session's origin instead of the
+                          local machine
+    -s, --session <id>    Target a specific session id instead of the default
+                          session.
     -h, --help            Show this help message and exit
 
   Examples:
@@ -142,8 +146,10 @@ const tunnelRmHelp = `  Remove an existing ssh tunnel.
     -L, --local           Remove a local forward
     -R, --remote          Remove a remote forward
         --id <id>         Remove a tunnel by its id instead of port.
-    -s, --session <id>    Target a specific session id instead of this shell's
-                          session (required when multiple sessions are active).
+        --client          Use the current sshex session's origin instead of the
+                          local machine
+    -s, --session <id>    Target a specific session id instead of the default
+                          session.
     -h, --help            Show this help message and exit
 `
 
@@ -153,10 +159,11 @@ const tunnelListHelp = `  List all active ssh tunnels.
     sshex tunnel list [options]
 
   Options:
-    -s, --session <id>    List tunnels for a specific session id instead of this
-                          shell's session.
-        --all             List tunnels across all sessions (the default on the
-                          origin; remote shells default to their own session).
+        --client          Use the current sshex session's origin instead of the
+                          local machine
+    -s, --session <id>    List tunnels for a specific session id instead of the
+                          default session.
+        --all             List tunnels across all sessions of the selected origin.
     -h, --help            Show this help message and exit
 `
 
@@ -171,19 +178,23 @@ const sessionHelp = `  Manage sshex sessions.
     help                  Show this help message and exit
 
   Options:
+        --client          Use the current sshex session's origin instead of the
+                          local machine
     -h, --help            Show this help message and exit
 `
 
 const sessionListHelp = `  List active sshex sessions.
 
   Usage:
-    sshex session list
+    sshex session list [options]
 
   Options:
+        --client          List the current sshex session's origin instead of the
+                          local machine
     -h, --help            Show this help message and exit
 
-  In a remote shell, its session is marked with *. On the origin, no session
-  is marked.
+  The list defaults to this machine. In client scope, the current shell's
+  session is marked with *.
 `
 
 const sessionCloseHelp = `  Close a session and drop its tunnels.
@@ -195,6 +206,8 @@ const sessionCloseHelp = `  Close a session and drop its tunnels.
     <id>                  The session id to close
 
   Options:
+        --client          Use the current sshex session's origin instead of the
+                          local machine
     -h, --help            Show this help message and exit
 `
 
@@ -287,6 +300,8 @@ const commandHelp = `  Manage predefined commands.
     help                  Show this help message and exit
 
   Options:
+        --client          Use the current sshex session's origin instead of the
+                          local machine
     -h, --help            Show this help message and exit
 `
 
@@ -349,9 +364,11 @@ const commandRmHelp = `  Remove a predefined command.
 const commandListHelp = `  List predefined commands.
 
   Usage:
-    sshex command list
+    sshex command list [options]
 
   Options:
+        --client          List the current sshex session's origin commands
+                          instead of the local machine's commands
     -s, --short           Hide the command column
     -h, --help            Show this help message and exit
 `

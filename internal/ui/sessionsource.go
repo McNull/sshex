@@ -19,17 +19,28 @@ import (
 
 const sessionRequestTimeout = 5 * time.Second
 
+// controlScope chooses which origin a screen talks to. Origin is the machine
+// running the UI; Client is the origin of the current outer session.
+type controlScope int
+
+const (
+	scopeClient controlScope = iota
+	scopeOrigin
+)
+
 // sessionControl adapts the live broker client for the Sessions screen. The
 // screen only sees its own narrow Source and Closer interfaces, so tests never
 // touch the daemon or the session files.
-type sessionControl struct{}
+type sessionControl struct {
+	scope controlScope
+}
 
 // List implements sessions.Source.
-func (sessionControl) List() ([]sessions.Session, error) {
+func (c sessionControl) List() ([]sessions.Session, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), sessionRequestTimeout)
 	defer cancel()
 
-	c, err := controlSessionClient()
+	broker, err := controlSessionClient(c.scope)
 	if err != nil {
 		if errors.Is(err, sessionfile.ErrNone) {
 			return nil, nil
@@ -37,7 +48,7 @@ func (sessionControl) List() ([]sessions.Session, error) {
 		return nil, err
 	}
 
-	list, err := c.ListSessions(ctx)
+	list, err := broker.ListSessions(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -78,39 +89,42 @@ func currentRemoteSessionID() string {
 }
 
 // Close implements sessions.Closer.
-func (sessionControl) Close(id string) error {
+func (c sessionControl) Close(id string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), sessionRequestTimeout)
 	defer cancel()
 
-	c, err := controlSessionClient()
+	broker, err := controlSessionClient(c.scope)
 	if err != nil {
 		return err
 	}
-	_, err = c.CloseSession(ctx, id)
+	_, err = broker.CloseSession(ctx, id)
 	return err
 }
 
-// controlSessionFile returns a live session file, preferring the default
-// session and falling back to any active one when the origin is ambiguous. It
-// mirrors the CLI's controlFile.
-func controlSessionFile() (sessionfile.File, error) {
-	file, err := sessionfile.Discover()
-	if err == nil {
-		return file, nil
-	}
-	if errors.Is(err, sessionfile.ErrAmbiguous) {
-		active, listErr := sessionfile.ListActive()
-		if listErr == nil && len(active) > 0 {
-			return active[0], nil
+// controlSessionFile returns a live session file for the scope. Client scope is
+// strictly the current SSHEX_SESSION. Origin scope scans only this machine's
+// runtime directory and falls back to the first active local session when more
+// than one is reachable, because any of them can address the local broker.
+func controlSessionFile(scope controlScope) (sessionfile.File, error) {
+	if scope == scopeOrigin {
+		file, err := sessionfile.DiscoverLocal()
+		if err == nil {
+			return file, nil
 		}
+		if errors.Is(err, sessionfile.ErrAmbiguous) {
+			active, listErr := sessionfile.ListActiveLocal()
+			if listErr == nil && len(active) > 0 {
+				return active[0], nil
+			}
+		}
+		return sessionfile.File{}, err
 	}
-	return sessionfile.File{}, err
+	return sessionfile.Current()
 }
 
-// controlSessionClient returns a client for some live broker using the same
-// discovery rule as the CLI.
-func controlSessionClient() (*client.Client, error) {
-	file, err := controlSessionFile()
+// controlSessionClient returns a client for the scope's live broker.
+func controlSessionClient(scope controlScope) (*client.Client, error) {
+	file, err := controlSessionFile(scope)
 	if err != nil {
 		return nil, err
 	}

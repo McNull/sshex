@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +14,8 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/mcnull/sshex/internal/config"
+	"github.com/mcnull/sshex/internal/sessionfile"
 	"github.com/mcnull/sshex/internal/ui/keys"
 	"github.com/mcnull/sshex/internal/ui/screen"
 	"github.com/mcnull/sshex/internal/ui/screen/menu"
@@ -310,6 +315,101 @@ func TestClientMenuPushesAndEscapesServerMenu(t *testing.T) {
 	m.Update(action)
 	if title := m.stack.Top().Title(); title != "Client menu" {
 		t.Fatalf("screen after esc = %q, want Client menu", title)
+	}
+}
+
+func TestRootMenuScopesTunnelSources(t *testing.T) {
+	t.Setenv("SSHEX_SESSION", "s1")
+	t.Setenv("SSHEX_RUNTIME_DIR", t.TempDir())
+	t.Setenv("SSHEX_HOME", t.TempDir())
+	m := New(ModelOptions{
+		Version:           "1.2.3",
+		HasDarkBackground: true,
+		NoColor:           true,
+	})
+
+	clientTunnel := &fakeTunnelSource{}
+	originTunnel := &fakeTunnelSource{}
+	clientDeps := screenDeps{tunnelSource: clientTunnel, tunnelController: fakeTunnelController{}}
+	originDeps := screenDeps{tunnelSource: originTunnel, tunnelController: fakeTunnelController{}}
+
+	// The Client menu's Tunnels entry uses the current session source.
+	clientMenu := newRootMenu(m.styles, clientDeps, originDeps, "1.2.3", "", true)
+	_, cmd := clientMenu.Update(press(tea.KeyEnter, ""))
+	action := run(t, cmd).(screen.ActionMsg)
+	clientTunnels := action.Screen
+	firstBatch(t, clientTunnels.Init())
+	if got := fmt.Sprint(clientTunnel.requested); got != "[s1]" {
+		t.Fatalf("client tunnel source requested %v, want [s1]", got)
+	}
+	if len(originTunnel.requested) != 0 {
+		t.Fatalf("origin tunnel source was used by the Client menu: %v", originTunnel.requested)
+	}
+
+	// The Server menu's Tunnels entry uses the local origin source.
+	clientMenu = newRootMenu(m.styles, clientDeps, originDeps, "1.2.3", "", true)
+	clientMenu.Update(press(tea.KeyDown, ""))
+	clientMenu.Update(press(tea.KeyDown, ""))
+	_, cmd = clientMenu.Update(press(tea.KeyEnter, ""))
+	serverMenu := run(t, cmd).(screen.ActionMsg).Screen
+	serverMenu.Update(press(tea.KeyDown, ""))
+	serverMenu.Update(press(tea.KeyDown, ""))
+	_, cmd = serverMenu.Update(press(tea.KeyEnter, ""))
+	serverTunnels := run(t, cmd).(screen.ActionMsg).Screen
+	firstBatch(t, serverTunnels.Init())
+
+	if got := fmt.Sprint(originTunnel.requested); got != "[]" {
+		t.Fatalf("origin tunnel source requested %v, want all local sessions", got)
+	}
+	if got := fmt.Sprint(clientTunnel.requested); got != "[s1]" {
+		t.Fatalf("client tunnel source was used by the Server menu: %v", got)
+	}
+}
+
+func TestServerMenuSwitchesHeaderToLocalOrigin(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.json")
+	data, err := json.Marshal(sessionfile.File{
+		ID:     "s1",
+		Origin: "outer-host",
+		Target: "alice@ssh01",
+	})
+	if err != nil {
+		t.Fatalf("marshal session file: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write session file: %v", err)
+	}
+	t.Setenv("SSHEX_SESSION", path)
+	t.Setenv("SSHEX_RUNTIME_DIR", t.TempDir())
+	t.Setenv("SSHEX_HOME", t.TempDir())
+
+	m := New(ModelOptions{
+		Version:           "1.2.3",
+		HasDarkBackground: true,
+		NoColor:           true,
+	})
+	resize(t, m, 80, 24)
+
+	header := func() string {
+		return ansi.Strip(strings.Split(m.View().Content, "\n")[0])
+	}
+	if got := header(); !strings.Contains(got, "client: alice@ssh01") || !strings.Contains(got, "origin: outer-host") {
+		t.Fatalf("client header = %q, want outer identity", got)
+	}
+
+	m.Update(press(tea.KeyDown, ""))
+	m.Update(press(tea.KeyDown, ""))
+	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	m.Update(run(t, cmd).(screen.ActionMsg))
+
+	if got := header(); strings.Contains(got, "client:") || strings.Contains(got, "outer-host") || !strings.Contains(got, "origin: "+config.Origin()) {
+		t.Fatalf("server header = %q, want local origin only", got)
+	}
+
+	_, cmd = m.Update(press(tea.KeyEsc, ""))
+	m.Update(run(t, cmd).(screen.ActionMsg))
+	if got := header(); !strings.Contains(got, "client: alice@ssh01") || !strings.Contains(got, "origin: outer-host") {
+		t.Fatalf("restored header = %q, want outer identity", got)
 	}
 }
 

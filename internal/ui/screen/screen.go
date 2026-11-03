@@ -28,6 +28,22 @@ type Screen interface {
 	Resize(width, height int)
 }
 
+// Scope identifies which origin the active screen manages. Screens that do not
+// implement Scoped inherit the scope of the nearest screen below them.
+type Scope int
+
+const (
+	// ScopeOrigin manages the machine running the UI.
+	ScopeOrigin Scope = iota
+	// ScopeClient manages the origin of the current outer session.
+	ScopeClient
+)
+
+// Scoped optionally marks the origin a screen belongs to.
+type Scoped interface {
+	Scope() Scope
+}
+
 // Resumable is implemented by screens that need to refresh when they become
 // the active screen again after a child screen is popped.
 type Resumable interface {

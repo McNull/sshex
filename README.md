@@ -33,8 +33,8 @@ for the detected shell. Set `SSHEX_NO_COMPLETIONS=1` to skip the completions.
 # on the origin
 $ sshex connect bob@server
 
-# in the remote shell
-$ sshex tunnel add 8080
+# in the remote shell; --client targets the session's origin
+$ sshex tunnel add --client 8080
 $ sshex exec code .
 ```
 
@@ -43,9 +43,9 @@ $ sshex exec code .
 Running `sshex` without arguments opens the full-screen terminal interface, as
 does `sshex ui`. Outside a session, the Server menu opens Connect, Sessions,
 Tunnels, Commands and Update. Inside an sshex session, the Client menu opens the
-current session's Tunnels and Commands, plus a Server entry that opens the
-Server menu. The default monochrome theme adapts to light and dark terminals and
-respects `NO_COLOR`.
+current session's Tunnels and Commands; its Server entry manages the machine
+running the UI as its own origin. The default monochrome theme adapts to light
+and dark terminals and respects `NO_COLOR`.
 
 ```sh
 $ sshex
@@ -64,7 +64,7 @@ $ sshex command list
 $ sshex command edit code
 ```
 
-Add, edit, list, enable, disable and remove commands. An `--alias` makes the name available in the remote shell. Only the origin can edit command definitions.
+Add, edit, list, enable, disable and remove commands. An `--alias` makes the name available in the remote shell. Only the origin can edit command definitions. `sshex command` manages the local machine; `sshex command --client` lists the current session's origin commands read-only.
 
 ### Executing Commands
 
@@ -85,7 +85,7 @@ $ sshex tunnel list
 $ sshex tunnel rm 8080
 ```
 
-Tunnels belong to the session. Every shell of the session sees them, and they survive an individual shell exiting. `-L` (local forward) is the default; `-R` exposes a local service on the remote.
+Tunnels belong to the session. Every shell of the session sees them, and they survive an individual shell exiting. `-L` (local forward) is the default; `-R` exposes a local service on the remote. Tunnel commands default to the machine running them; use `--client` inside a remote shell to manage the current session's origin.
 
 ## Architecture
 
@@ -94,12 +94,12 @@ Tunnels belong to the session. Every shell of the session sees them, and they su
  ┌──────────────────────────────────┐        ┌───────────────────────────┐
  │  sshex (local CLI)               │        │  sshex (remote CLI)       │
  │      │ unix socket               │        │      thin HTTP client     │
- │      v                           │        │            │              │
- │  sshexd  broker                  │ control│            │              │
- │   ├─ REST API (unix, 0600)       │<──────>│            │              │
- │   ├─ Session/Tunnel/Command svc  │ ssh -R │            │              │
- │   ├─ repositories (in-memory)    │        │            │              │
- │   └─ SSH master (system ssh)     │        └────────────┼──────────────┘
+ │      v                           │        │                           │
+ │  sshexd  broker                  │ control│                           │
+ │   ├─ REST API (unix, 0600)       │<──────>│                           │
+ │   ├─ Session/Tunnel/Command svc  │ ssh -R │                           │
+ │   ├─ repositories (in-memory)    │        │                           │
+ │   └─ SSH master (system ssh)     │        └────────────┬──────────────┘
  └───────────────┬──────────────────┘                     │
                  │  ssh -L / -R  (user tunnels)           │
                  └────────────────────────────────────────┘

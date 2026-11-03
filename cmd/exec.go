@@ -17,7 +17,7 @@ var execCmd = &cobra.Command{
 	ValidArgsFunction: completeExecCommandNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sessionID, _ := cmd.Flags().GetString("session")
-		c, err := selectClient(sessionID)
+		c, err := autoSessionClient(sessionID)
 		if err != nil {
 			return err
 		}
@@ -46,7 +46,7 @@ var execCmd = &cobra.Command{
 func init() {
 	execCmd.Flags().StringP("session", "s", "", "Target a specific session id")
 	execCmd.Flags().SetInterspersed(false)
-	_ = execCmd.RegisterFlagCompletionFunc("session", completeSessionIDs)
+	_ = execCmd.RegisterFlagCompletionFunc("session", completeAutoSessionIDs)
 }
 
 // completeExecCommandNames completes the first positional argument with the
@@ -57,7 +57,7 @@ func completeExecCommandNames(_ *cobra.Command, args []string, toComplete string
 	if len(args) > 0 {
 		return nil, cobra.ShellCompDirectiveDefault
 	}
-	manager, err := resolveCommandManager()
+	manager, err := resolveAutoCommandManager()
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

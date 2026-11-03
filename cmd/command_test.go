@@ -5,12 +5,34 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/mcnull/sshex/internal/model"
 	"github.com/spf13/cobra"
 )
+
+func TestCommandManagerClientScopeIsReadOnly(t *testing.T) {
+	runtimeDir, err := os.MkdirTemp("/tmp", "sshex-")
+	if err != nil {
+		t.Fatalf("create runtime dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(runtimeDir) })
+	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
+	t.Setenv("SSHEX_HOME", t.TempDir())
+	t.Setenv("SSHEX_SESSION", "")
+	liveSession(t, runtimeDir, "s1", "bob@ssh01")
+	t.Setenv("SSHEX_SESSION", "s1")
+
+	manager, err := resolveCommandManager(scopeClient)
+	if err != nil {
+		t.Fatalf("resolveCommandManager(client) error: %v", err)
+	}
+	if manager.CanManage() {
+		t.Fatal("client scope can manage commands, want read-only")
+	}
+}
 
 func TestPromptFieldRejectsEmptyRequired(t *testing.T) {
 	var out, errOut bytes.Buffer

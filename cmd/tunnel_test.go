@@ -24,20 +24,21 @@ func TestShouldListAllTunnels(t *testing.T) {
 		name            string
 		all             bool
 		sessionID       string
+		scope           controlScope
 		remoteSessionID string
 		want            bool
 	}{
-		{name: "origin defaults to all", want: true},
-		{name: "remote defaults to current session", remoteSessionID: "s1", want: false},
-		{name: "explicit session on origin", sessionID: "s2", want: false},
-		{name: "explicit session remotely", sessionID: "s2", remoteSessionID: "s1", want: false},
-		{name: "all overrides explicit session", all: true, sessionID: "s2", want: true},
-		{name: "all overrides remote default", all: true, remoteSessionID: "s1", want: true},
+		{name: "origin defaults to all", scope: scopeOrigin, want: true},
+		{name: "client defaults to current session", scope: scopeClient, remoteSessionID: "s1", want: false},
+		{name: "explicit session on origin", scope: scopeOrigin, sessionID: "s2", want: false},
+		{name: "explicit session on client", scope: scopeClient, sessionID: "s2", remoteSessionID: "s1", want: false},
+		{name: "all overrides explicit session", all: true, scope: scopeOrigin, sessionID: "s2", want: true},
+		{name: "all overrides client default", all: true, scope: scopeClient, remoteSessionID: "s1", want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := shouldListAllTunnels(tt.all, tt.sessionID, tt.remoteSessionID); got != tt.want {
-				t.Fatalf("shouldListAllTunnels(%t, %q, %q) = %t, want %t", tt.all, tt.sessionID, tt.remoteSessionID, got, tt.want)
+			if got := shouldListAllTunnels(tt.all, tt.sessionID, tt.scope, tt.remoteSessionID); got != tt.want {
+				t.Fatalf("shouldListAllTunnels(%t, %q, %v, %q) = %t, want %t", tt.all, tt.sessionID, tt.scope, tt.remoteSessionID, got, tt.want)
 			}
 		})
 	}
@@ -71,7 +72,7 @@ func TestListAllTunnelsWithoutActiveSessions(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetContext(context.Background())
 	cmd.SetOut(&out)
-	if err := listAllTunnels(cmd); err != nil {
+	if err := listAllTunnels(cmd, scopeOrigin); err != nil {
 		t.Fatalf("listAllTunnels() error: %v", err)
 	}
 	if got, want := out.String(), "No active sessions.\n"; got != want {

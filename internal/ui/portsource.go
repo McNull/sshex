@@ -16,14 +16,16 @@ const portRequestTimeout = 8 * time.Second
 
 // portControl adapts the live broker client for the add-tunnel port list. The
 // screen only sees the narrow tunnels.PortSource interface.
-type portControl struct{}
+type portControl struct {
+	scope controlScope
+}
 
 // List implements tunnels.PortSource.
-func (portControl) List(sessionID string, host tunnels.PortHost) ([]tunnels.Port, error) {
+func (c portControl) List(sessionID string, host tunnels.PortHost) ([]tunnels.Port, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), portRequestTimeout)
 	defer cancel()
 
-	c, err := controlSessionClient()
+	broker, err := controlSessionClient(c.scope)
 	if err != nil {
 		if errors.Is(err, sessionfile.ErrNone) {
 			return nil, nil
@@ -31,7 +33,7 @@ func (portControl) List(sessionID string, host tunnels.PortHost) ([]tunnels.Port
 		return nil, err
 	}
 
-	list, err := c.ForSession(sessionID).ListPorts(ctx, string(host))
+	list, err := broker.ForSession(sessionID).ListPorts(ctx, string(host))
 	if err != nil {
 		return nil, err
 	}

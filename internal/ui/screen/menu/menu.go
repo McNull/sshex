@@ -39,6 +39,8 @@ type Options struct {
 	// Nested marks a menu pushed above another menu. Escape returns to the
 	// previous screen instead of quitting the UI, and q is not bound.
 	Nested bool
+	// Scope identifies the origin this menu manages.
+	Scope screen.Scope
 }
 
 // Model is a menu screen.
@@ -50,6 +52,7 @@ type Model struct {
 	title           string
 	help            string
 	nested          bool
+	scope           screen.Scope
 	version         string
 	updateAvailable string
 	selected        int
@@ -75,6 +78,7 @@ func New(opts Options) *Model {
 		title:           title,
 		help:            help,
 		nested:          opts.Nested,
+		scope:           opts.Scope,
 		version:         opts.Version,
 		updateAvailable: opts.UpdateAvailable,
 	}
@@ -85,6 +89,9 @@ func (m *Model) Init() tea.Cmd { return nil }
 
 // Title implements screen.Screen.
 func (m *Model) Title() string { return m.title }
+
+// Scope implements screen.Scoped.
+func (m *Model) Scope() screen.Scope { return m.scope }
 
 // HelpText implements screen.HelpProvider.
 func (m *Model) HelpText() string { return m.help }

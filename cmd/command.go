@@ -36,7 +36,7 @@ var commandAddCmd = &cobra.Command{
 	Args:              addCommandArgs,
 	ValidArgsFunction: completeCommandNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		manager, err := resolveCommandManager()
+		manager, err := resolveCommandManager(scopeFromFlags(cmd))
 		if err != nil {
 			return err
 		}
@@ -258,7 +258,7 @@ var commandEditCmd = &cobra.Command{
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: completeCommandNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		manager, err := resolveCommandManager()
+		manager, err := resolveCommandManager(scopeFromFlags(cmd))
 		if err != nil {
 			return err
 		}
@@ -393,7 +393,7 @@ var commandRmCmd = &cobra.Command{
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: completeCommandNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		manager, err := resolveCommandManager()
+		manager, err := resolveCommandManager(scopeFromFlags(cmd))
 		if err != nil {
 			return err
 		}
@@ -413,7 +413,7 @@ var commandListCmd = &cobra.Command{
 	Short: "List predefined commands",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		manager, err := resolveCommandManager()
+		manager, err := resolveCommandManager(scopeFromFlags(cmd))
 		if err != nil {
 			return err
 		}
@@ -491,7 +491,7 @@ var commandHelpCmd = &cobra.Command{
 }
 
 func setCommandDisabled(cmd *cobra.Command, name string, disabled bool) error {
-	manager, err := resolveCommandManager()
+	manager, err := resolveCommandManager(scopeFromFlags(cmd))
 	if err != nil {
 		return err
 	}
@@ -624,12 +624,29 @@ func (l localCommands) SetDisabled(ctx context.Context, name string, disabled bo
 
 func (l localCommands) CanManage() bool { return true }
 
-// resolveCommandManager prefers the broker when a live session is discoverable
-// so commands can be managed from a remote shell; otherwise it edits the local
-// config directly. A discovered session that lacks the commands capability is a
-// remote session and is returned read-only.
-func resolveCommandManager() (commandManager, error) {
-	if file, err := controlFile(); err == nil {
+// resolveCommandManager uses the broker of the selected scope when one is live,
+// so mutations flow through the broker and republish aliases. Origin scope falls
+// back to the local config; client scope is read-only without the commands
+// capability.
+func resolveCommandManager(scope controlScope) (commandManager, error) {
+	if file, err := scope.sessionFile(); err == nil {
+		return remoteCommands{
+			client:    client.New(file),
+			canManage: file.Capabilities.Contains(model.CapabilityCommands),
+		}, nil
+	} else if scope == scopeClient {
+		return nil, err
+	}
+	if application == nil || application.Commands == nil {
+		return nil, errors.New("command manager unavailable")
+	}
+	return localCommands{commands: application.Commands}, nil
+}
+
+// resolveAutoCommandManager mirrors exec's client-side resolution for
+// completion: prefer the current session, then any active session.
+func resolveAutoCommandManager() (commandManager, error) {
+	if file, err := autoSessionFile(); err == nil {
 		return remoteCommands{
 			client:    client.New(file),
 			canManage: file.Capabilities.Contains(model.CapabilityCommands),
@@ -650,8 +667,8 @@ func requireCommandEditable(manager commandManager) error {
 	return nil
 }
 
-func completeCommandNames(_ *cobra.Command, _ []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
-	manager, err := resolveCommandManager()
+func completeCommandNames(cmd *cobra.Command, _ []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	manager, err := resolveCommandManager(scopeFromFlags(cmd))
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -671,6 +688,7 @@ func completeCommandNames(_ *cobra.Command, _ []string, _ string) ([]cobra.Compl
 }
 
 func init() {
+	commandCmd.PersistentFlags().Bool("client", false, "Use the current sshex session's origin instead of the local machine")
 	commandAddCmd.Flags().Bool("disabled", false, "Add the command in a disabled state")
 	commandAddCmd.Flags().String("alias", "", "Add a shell alias for the command on the remote (defaults to the command name)")
 	commandAddCmd.Flags().Lookup("alias").NoOptDefVal = aliasFromName

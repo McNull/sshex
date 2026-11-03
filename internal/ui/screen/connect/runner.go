@@ -3,6 +3,7 @@ package connect
 import (
 	"os"
 	"os/exec"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -42,7 +43,19 @@ func connectCommand(target string) (*exec.Cmd, error) {
 
 	cmd := exec.Command(executable, "connect", target)
 	// The UI already brands the session; a nested banner would clutter the
-	// terminal before the shell starts.
-	cmd.Env = append(os.Environ(), noBannerEnv)
+	// terminal before the shell starts. The Server menu always starts a local
+	// origin connection, so the outer client session must not leak into it.
+	cmd.Env = append(withoutSession(os.Environ()), noBannerEnv)
 	return cmd, nil
+}
+
+func withoutSession(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, entry := range env {
+		if strings.HasPrefix(entry, "SSHEX_SESSION=") {
+			continue
+		}
+		out = append(out, entry)
+	}
+	return out
 }

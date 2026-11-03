@@ -109,31 +109,94 @@ func RemoteDir() (string, error) {
 	return filepath.Join(base, "sshex", "sessions"), nil
 }
 
-func Discover() (File, error) {
-	if value := os.Getenv("SSHEX_SESSION"); value != "" {
-		if strings.ContainsRune(value, os.PathSeparator) {
-			return Read(value)
-		}
-		for _, dir := range discoverDirs() {
-			if f, err := Read(filepath.Join(dir, value+".json")); err == nil {
-				return f, nil
-			}
-		}
+// Current returns the session file selected by SSHEX_SESSION. It never falls
+// back to another active session; callers that mean "the current client
+// session" use it so they cannot accidentally pick a different origin.
+func Current() (File, error) {
+	value := strings.TrimSpace(os.Getenv("SSHEX_SESSION"))
+	if value == "" {
 		return File{}, ErrNone
+	}
+	if strings.ContainsRune(value, os.PathSeparator) {
+		return Read(value)
+	}
+	for _, dir := range discoverDirs() {
+		if f, err := Read(filepath.Join(dir, value+".json")); err == nil {
+			return f, nil
+		}
+	}
+	return File{}, ErrNone
+}
+
+func Discover() (File, error) {
+	if strings.TrimSpace(os.Getenv("SSHEX_SESSION")) != "" {
+		return Current()
 	}
 
 	var candidates []File
 	for _, dir := range discoverDirs() {
-		files, err := ListDir(dir)
+		active, err := listActiveDir(dir)
 		if err != nil {
 			continue
 		}
-		for _, f := range files {
-			if alive(f) {
-				candidates = append(candidates, f)
-			}
+		candidates = append(candidates, active...)
+	}
+	return single(candidates)
+}
+
+// DiscoverLocal returns the one active session of this machine's own broker.
+// It ignores SSHEX_SESSION and forwarded remote session files, so a command run
+// inside a client shell can still manage the local origin.
+func DiscoverLocal() (File, error) {
+	dir, err := LocalDir()
+	if err != nil {
+		return File{}, err
+	}
+	candidates, err := listActiveDir(dir)
+	if err != nil {
+		return File{}, err
+	}
+	return single(candidates)
+}
+
+// ListActive returns every session file whose endpoint is reachable from this
+// machine, without treating more than one as an error.
+func ListActive() ([]File, error) {
+	var active []File
+	for _, dir := range discoverDirs() {
+		files, err := listActiveDir(dir)
+		if err != nil {
+			continue
+		}
+		active = append(active, files...)
+	}
+	return active, nil
+}
+
+// ListActiveLocal returns every active session of this machine's own broker.
+func ListActiveLocal() ([]File, error) {
+	dir, err := LocalDir()
+	if err != nil {
+		return nil, err
+	}
+	return listActiveDir(dir)
+}
+
+func listActiveDir(dir string) ([]File, error) {
+	files, err := ListDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	active := make([]File, 0, len(files))
+	for _, f := range files {
+		if alive(f) {
+			active = append(active, f)
 		}
 	}
+	return active, nil
+}
+
+func single(candidates []File) (File, error) {
 	switch len(candidates) {
 	case 0:
 		return File{}, ErrNone
@@ -142,24 +205,6 @@ func Discover() (File, error) {
 	default:
 		return File{}, ErrAmbiguous
 	}
-}
-
-// ListActive returns every session file whose endpoint is reachable from this
-// machine, without treating more than one as an error.
-func ListActive() ([]File, error) {
-	var active []File
-	for _, dir := range discoverDirs() {
-		files, err := ListDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, f := range files {
-			if alive(f) {
-				active = append(active, f)
-			}
-		}
-	}
-	return active, nil
 }
 
 func alive(f File) bool {

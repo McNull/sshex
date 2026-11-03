@@ -73,11 +73,11 @@ func TestConnectAndTunnel(t *testing.T) {
 	go func() {
 		defer pw.Close()
 		time.Sleep(5 * time.Second)
-		fmt.Fprintln(pw, "sshex tunnel add 2222:localhost:22")
+		fmt.Fprintln(pw, "sshex tunnel add --client 2222:localhost:22")
 		time.Sleep(2 * time.Second)
-		fmt.Fprintln(pw, "sshex tunnel add 2222:localhost:22")
+		fmt.Fprintln(pw, "sshex tunnel add --client 2222:localhost:22")
 		time.Sleep(2 * time.Second)
-		fmt.Fprintln(pw, "sshex tunnel list")
+		fmt.Fprintln(pw, "sshex tunnel list --client")
 		time.Sleep(2 * time.Second)
 		fmt.Fprintln(pw, "exit")
 	}()
@@ -256,7 +256,7 @@ func TestMultipleSessionsSharing(t *testing.T) {
 	binary := buildBinary(t)
 	runtimeDir := t.TempDir()
 
-	a := startShell(t, binary, runtimeDir, host, "sshex tunnel add 3333:localhost:22", 8*time.Second)
+	a := startShell(t, binary, runtimeDir, host, "sshex tunnel add --client 3333:localhost:22", 8*time.Second)
 	waitForSessionCount(t, runtimeDir, 1)
 
 	b := startShell(t, binary, runtimeDir, host, "", 0)
@@ -287,7 +287,7 @@ func TestMultipleSessionsSharing(t *testing.T) {
 	}
 
 	// Recreate it and close A while B is still connected: the tunnel must survive.
-	a.send("sshex tunnel add 3333:localhost:22")
+	a.send("sshex tunnel add --client 3333:localhost:22")
 	waitForTunnel(t, binary, runtimeDir, "localhost:3333 > localhost:22")
 	a.stop(t)
 

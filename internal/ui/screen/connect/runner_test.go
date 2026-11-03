@@ -2,10 +2,12 @@ package connect
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
 func TestConnectCommand(t *testing.T) {
+	t.Setenv("SSHEX_SESSION", "client-session")
 	cmd, err := connectCommand("user@example.com")
 	if err != nil {
 		t.Fatalf("connectCommand() error: %v", err)
@@ -17,5 +19,10 @@ func TestConnectCommand(t *testing.T) {
 	}
 	if !slices.Contains(cmd.Env, noBannerEnv) {
 		t.Fatalf("env does not contain %q", noBannerEnv)
+	}
+	for _, entry := range cmd.Env {
+		if strings.HasPrefix(entry, "SSHEX_SESSION=") {
+			t.Fatalf("env leaked the outer session: %q", entry)
+		}
 	}
 }
