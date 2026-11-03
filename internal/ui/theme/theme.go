@@ -50,6 +50,31 @@ type paletteFunc func(dark bool) Tokens
 
 var palettes = map[string]paletteFunc{
 	DefaultName: mono,
+	"ocean":     tinted(tint{"#7cc4ff", "#13283a", "#1e3f5c", "#2a4a66"}, tint{"#0b5394", "#dcebf8", "#c2dbf2", "#a9c8e6"}),
+	"forest":    tinted(tint{"#8fd18f", "#16301b", "#22482a", "#2e4f33"}, tint{"#1f6b2a", "#dff0e0", "#c6e4c9", "#a8d0ad"}),
+	"amber":     tinted(tint{"#ffc266", "#3a2a10", "#57401a", "#5c4522"}, tint{"#9a5b00", "#f7ead2", "#efd9b0", "#e0c28c"}),
+	"rose":      tinted(tint{"#ff8fb8", "#3a1626", "#572239", "#5c2a40"}, tint{"#a3245a", "#f8dfe9", "#f0c4d6", "#e2a6bf"}),
+}
+
+// tint is the accent, selection, focused selection and border colors that
+// distinguish a colored theme from mono.
+type tint struct{ accent, selection, focus, border string }
+
+// tinted builds a palette from mono, recoloring only the tinted tokens so
+// text contrast and status colors stay identical across themes.
+func tinted(dark, light tint) paletteFunc {
+	return func(isDark bool) Tokens {
+		t := light
+		if isDark {
+			t = dark
+		}
+		tokens := mono(isDark)
+		tokens.Accent = lipgloss.Color(t.accent)
+		tokens.Selection = lipgloss.Color(t.selection)
+		tokens.SelectionFocus = lipgloss.Color(t.focus)
+		tokens.Border = lipgloss.Color(t.border)
+		return tokens
+	}
 }
 
 // Load resolves a theme by name. Unknown names fall back to the default theme.
@@ -75,14 +100,17 @@ func Load(opts Options) Theme {
 	return theme
 }
 
-// Names lists the available theme names in sorted order.
+// Names lists the available theme names: the default first, then the rest in
+// sorted order.
 func Names() []string {
 	names := make([]string, 0, len(palettes))
 	for name := range palettes {
-		names = append(names, name)
+		if name != DefaultName {
+			names = append(names, name)
+		}
 	}
 	sort.Strings(names)
-	return names
+	return append([]string{DefaultName}, names...)
 }
 
 // mono is the default black-and-white theme: contrast, weight and spacing do
