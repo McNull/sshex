@@ -192,6 +192,7 @@ install_completions() {
 		fish_dir="${XDG_CONFIG_HOME:-$HOME/.config}/fish/completions"
 		if mkdir -p "$fish_dir" && cp "$completion" "$fish_dir/sshex.fish"; then
 			echo "Installed fish completions."
+			echo "Restart your shell to load completions."
 		else
 			echo "sshex: warning: could not install fish completions" >&2
 		fi
@@ -214,6 +215,7 @@ install_completions() {
 	line="$(completion_source_line "$shell")"
 	if install_managed_line "$rc" "$line"; then
 		echo "Installed ${shell} completions in ${rc}."
+		echo 'Restart your shell or run: eval "$(sshex completions $SHELL)"'
 	else
 		echo "sshex: warning: could not update ${rc} for completions" >&2
 	fi
