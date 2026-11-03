@@ -40,9 +40,10 @@ $ sshex exec code .
 
 ## Terminal UI
 
-`sshex ui` opens a full-screen terminal interface. The menu is the first
-implemented screen; Connect, Sessions, Tunnels, Commands and Update currently
-open placeholders while their views are built. The default monochrome theme
+`sshex ui` opens a full-screen terminal interface. Outside a session, the
+Server menu opens Connect, Sessions, Tunnels, Commands and Update. Inside an
+sshex session, the Client menu opens the current session's Tunnels and Commands,
+plus a Server entry that opens the Server menu. The default monochrome theme
 adapts to light and dark terminals and respects `NO_COLOR`.
 
 ```sh

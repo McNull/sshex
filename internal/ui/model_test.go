@@ -19,7 +19,9 @@ import (
 	updatescreen "github.com/mcnull/sshex/internal/ui/screen/update"
 )
 
-func newTestModel() *Model {
+func newTestModel(t *testing.T) *Model {
+	t.Helper()
+	t.Setenv("SSHEX_SESSION", "")
 	return New(ModelOptions{
 		Version:           "1.2.3",
 		HasDarkBackground: true,
@@ -46,7 +48,7 @@ func run(t *testing.T, cmd tea.Cmd) tea.Msg {
 
 func TestModelRendersFullWindow(t *testing.T) {
 	t.Setenv("SSHEX_SESSION", "")
-	m := newTestModel()
+	m := newTestModel(t)
 	resize(t, m, 80, 24)
 
 	content := m.View().Content
@@ -96,7 +98,7 @@ func TestModelRendersHeaderIdentity(t *testing.T) {
 }
 
 func TestModelPushesAndPopsScreen(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	resize(t, m, 80, 24)
 
 	_, cmd := m.Update(press(tea.KeyEnter, ""))
@@ -129,7 +131,7 @@ func TestModelPushesAndPopsScreen(t *testing.T) {
 }
 
 func TestModelOpensSessionsScreen(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	resize(t, m, 80, 24)
 
 	m.Update(press(tea.KeyDown, ""))
@@ -146,7 +148,7 @@ func TestModelOpensSessionsScreen(t *testing.T) {
 }
 
 func TestModelOpensCommandsScreen(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	resize(t, m, 80, 24)
 
 	for range 3 {
@@ -185,6 +187,7 @@ func (fakeUpdateScreenInstaller) Install() (updatescreen.Result, error) {
 }
 
 func TestModelOpensUpdateScreen(t *testing.T) {
+	t.Setenv("SSHEX_SESSION", "")
 	m := New(ModelOptions{
 		Version:           "1.2.3",
 		HasDarkBackground: true,
@@ -216,6 +219,100 @@ func TestModelOpensUpdateScreen(t *testing.T) {
 	}
 }
 
+func TestModelStartsWithClientMenuInSession(t *testing.T) {
+	t.Setenv("SSHEX_SESSION", "s1")
+	t.Setenv("SSHEX_RUNTIME_DIR", t.TempDir())
+	t.Setenv("SSHEX_HOME", t.TempDir())
+	m := New(ModelOptions{
+		Version:           "1.2.3",
+		HasDarkBackground: true,
+		NoColor:           true,
+	})
+	resize(t, m, 80, 24)
+
+	if title := m.stack.Top().Title(); title != "Client menu" {
+		t.Fatalf("root screen title = %q, want Client menu", title)
+	}
+	view := ansi.Strip(m.View().Content)
+	for _, want := range []string{"Tunnels", "Commands", "Server"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("client menu is missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "Connect") || strings.Contains(view, "Sessions") {
+		t.Fatalf("client menu shows server-only entries:\n%s", view)
+	}
+}
+
+func TestClientMenuTunnelsUsesCurrentSession(t *testing.T) {
+	t.Setenv("SSHEX_SESSION", "s1")
+	t.Setenv("SSHEX_RUNTIME_DIR", t.TempDir())
+	t.Setenv("SSHEX_HOME", t.TempDir())
+	source := &fakeTunnelSource{}
+	m := New(ModelOptions{
+		Version:           "1.2.3",
+		HasDarkBackground: true,
+		NoColor:           true,
+		TunnelSource:      source,
+		TunnelController:  fakeTunnelController{},
+	})
+	resize(t, m, 80, 24)
+
+	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	action := run(t, cmd).(screen.ActionMsg)
+	_, pushCmd := m.Update(action)
+	if title := m.stack.Top().Title(); title != "Tunnels" {
+		t.Fatalf("screen title = %q, want Tunnels", title)
+	}
+	m.Update(firstBatch(t, pushCmd))
+
+	if got := fmt.Sprint(source.requested); got != "[s1]" {
+		t.Fatalf("requested sessions = %v, want [s1]", got)
+	}
+}
+
+func TestClientMenuPushesAndEscapesServerMenu(t *testing.T) {
+	t.Setenv("SSHEX_SESSION", "s1")
+	t.Setenv("SSHEX_RUNTIME_DIR", t.TempDir())
+	t.Setenv("SSHEX_HOME", t.TempDir())
+	m := New(ModelOptions{
+		Version:           "1.2.3",
+		HasDarkBackground: true,
+		NoColor:           true,
+	})
+	resize(t, m, 80, 24)
+
+	m.Update(press(tea.KeyDown, ""))
+	m.Update(press(tea.KeyDown, ""))
+	_, cmd := m.Update(press(tea.KeyEnter, ""))
+	action := run(t, cmd).(screen.ActionMsg)
+	if action.Action != screen.ActionPush {
+		t.Fatalf("server action = %v, want push", action.Action)
+	}
+	m.Update(action)
+
+	if title := m.stack.Top().Title(); title != "Server menu" {
+		t.Fatalf("pushed screen title = %q, want Server menu", title)
+	}
+	if m.stack.Len() != 2 {
+		t.Fatalf("stack length = %d, want 2", m.stack.Len())
+	}
+
+	if _, cmd := m.Update(press('q', "q")); cmd != nil {
+		t.Fatal("q quit the UI from the nested Server menu")
+	}
+
+	_, cmd = m.Update(press(tea.KeyEsc, ""))
+	action = run(t, cmd).(screen.ActionMsg)
+	if action.Action != screen.ActionPop {
+		t.Fatalf("esc action = %v, want pop", action.Action)
+	}
+	m.Update(action)
+	if title := m.stack.Top().Title(); title != "Client menu" {
+		t.Fatalf("screen after esc = %q, want Client menu", title)
+	}
+}
+
 type resumableStub struct {
 	resumed bool
 }
@@ -232,7 +329,7 @@ func (s *resumableStub) Resume() tea.Cmd {
 }
 
 func TestModelResumesScreenAfterPop(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	resize(t, m, 80, 24)
 
 	revealed := &resumableStub{}
@@ -246,7 +343,7 @@ func TestModelResumesScreenAfterPop(t *testing.T) {
 }
 
 func TestConnectStateSurvivesMenuRoundTrip(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	resize(t, m, 80, 24)
 
 	_, cmd := m.Update(press(tea.KeyEnter, ""))
@@ -277,7 +374,7 @@ func TestConnectStateSurvivesMenuRoundTrip(t *testing.T) {
 }
 
 func TestModelQuitKeys(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	resize(t, m, 80, 24)
 
 	_, cmd := m.Update(press('q', "q"))
@@ -299,7 +396,7 @@ func TestModelQuitKeys(t *testing.T) {
 }
 
 func TestModelHelpOverlayOpensAndClosesWithoutUpdatingScreen(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	resize(t, m, 80, 24)
 
 	_, cmd := m.Update(press('h', "h"))
@@ -310,7 +407,7 @@ func TestModelHelpOverlayOpensAndClosesWithoutUpdatingScreen(t *testing.T) {
 		t.Fatal("h did not open help")
 	}
 	view := ansi.Strip(m.View().Content)
-	for _, want := range []string{"Main menu help", "Choose a section", "Press esc to close help"} {
+	for _, want := range []string{"Server menu help", "Choose a section", "Press esc to close help"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("help overlay missing %q:\n%s", want, view)
 		}
@@ -331,7 +428,7 @@ func TestModelHelpOverlayOpensAndClosesWithoutUpdatingScreen(t *testing.T) {
 }
 
 func TestModelDoesNotOpenHelpWhileTyping(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	resize(t, m, 80, 24)
 	_, cmd := m.Update(press(tea.KeyEnter, ""))
 	m.Update(run(t, cmd).(screen.ActionMsg))
@@ -343,7 +440,7 @@ func TestModelDoesNotOpenHelpWhileTyping(t *testing.T) {
 }
 
 func TestModelQuitWithError(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	resize(t, m, 80, 24)
 
 	want := errors.New("exit status 255")
@@ -357,6 +454,7 @@ func TestModelQuitWithError(t *testing.T) {
 }
 
 func TestModelShowsUpdateAvailable(t *testing.T) {
+	t.Setenv("SSHEX_SESSION", "")
 	m := New(ModelOptions{
 		Version:           "1.2.3",
 		UpdateAvailable:   "2.0.0",
@@ -419,6 +517,7 @@ func firstBatch(t *testing.T, cmd tea.Cmd) tea.Msg {
 }
 
 func TestModelOpensAllSessionTunnels(t *testing.T) {
+	t.Setenv("SSHEX_SESSION", "")
 	source := &fakeTunnelSource{items: []tunnels.Tunnel{
 		{
 			ID: "t1", SessionID: "s1", Target: "bob@ssh01",
@@ -466,6 +565,7 @@ func TestModelOpensAllSessionTunnels(t *testing.T) {
 }
 
 func TestMenuTunnelAddUsesPickerAndForm(t *testing.T) {
+	t.Setenv("SSHEX_SESSION", "")
 	sessionSource := &fakeSessionSource{items: []sessions.Session{
 		{ID: "s1", Target: "bob@ssh01", Host: "ssh01", State: "active"},
 	}}
@@ -535,6 +635,7 @@ func TestMenuTunnelAddUsesPickerAndForm(t *testing.T) {
 }
 
 func TestSessionTunnelScreenIsCached(t *testing.T) {
+	t.Setenv("SSHEX_SESSION", "")
 	sessionSource := &fakeSessionSource{items: []sessions.Session{
 		{ID: "s1", Target: "bob@ssh01", Host: "ssh01", State: "active"},
 	}}
@@ -590,7 +691,7 @@ func TestSessionTunnelScreenIsCached(t *testing.T) {
 
 func TestModelShowsMinimumSizeMessage(t *testing.T) {
 	for _, size := range [][2]int{{40, 10}, {48, 15}} {
-		m := newTestModel()
+		m := newTestModel(t)
 		resize(t, m, size[0], size[1])
 		if !strings.Contains(m.View().Content, "Terminal too small") {
 			t.Fatalf("%dx%d small terminal message is missing", size[0], size[1])
@@ -599,7 +700,7 @@ func TestModelShowsMinimumSizeMessage(t *testing.T) {
 }
 
 func TestModelNoColorStyles(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	resize(t, m, 80, 24)
 	if !m.styles.MenuRowSelected.GetReverse() {
 		t.Fatal("no-color selection should use reverse video")
@@ -607,6 +708,7 @@ func TestModelNoColorStyles(t *testing.T) {
 }
 
 func TestModelAdaptsToBackgroundColor(t *testing.T) {
+	t.Setenv("SSHEX_SESSION", "")
 	m := New(ModelOptions{Version: "1.2.3", HasDarkBackground: true})
 	dark := m.styles.ScreenTitle.GetForeground()
 

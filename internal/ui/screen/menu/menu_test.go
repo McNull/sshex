@@ -16,17 +16,23 @@ import (
 func newMenu() *Model {
 	styles := theme.NewStyles(theme.Load(theme.Options{NoColor: true}))
 	stylesPtr := &styles
-	return New([]Item{
-		{Kind: "one", Title: "One", Description: "First", Open: func() screen.Screen {
-			return placeholder.New("One", "First", stylesPtr)
-		}},
-		{Kind: "two", Title: "Two", Description: "Second", Open: func() screen.Screen {
-			return placeholder.New("Two", "Second", stylesPtr)
-		}},
-		{Kind: "three", Title: "Three", Description: "Third", Open: func() screen.Screen {
-			return placeholder.New("Three", "Third", stylesPtr)
-		}},
-	}, "1.2.3", "", stylesPtr)
+	return New(Options{
+		Items: []Item{
+			{Kind: "one", Title: "One", Description: "First", Open: func() screen.Screen {
+				return placeholder.New("One", "First", stylesPtr)
+			}},
+			{Kind: "two", Title: "Two", Description: "Second", Open: func() screen.Screen {
+				return placeholder.New("Two", "Second", stylesPtr)
+			}},
+			{Kind: "three", Title: "Three", Description: "Third", Open: func() screen.Screen {
+				return placeholder.New("Three", "Third", stylesPtr)
+			}},
+		},
+		Version: "1.2.3",
+		Styles:  stylesPtr,
+		Title:   "Test menu",
+		Help:    "Test help",
+	})
 }
 
 func press(code rune, text string) tea.KeyPressMsg {
@@ -151,5 +157,40 @@ func TestMenuKeys(t *testing.T) {
 	m := newMenu()
 	if len(m.Keys()) != 4 {
 		t.Fatalf("menu keys = %d, want 4", len(m.Keys()))
+	}
+}
+
+func TestMenuTitleAndHelpAreCustomizable(t *testing.T) {
+	m := newMenu()
+	if got := m.Title(); got != "Test menu" {
+		t.Fatalf("Title() = %q, want Test menu", got)
+	}
+	if got := m.HelpText(); got != "Test help" {
+		t.Fatalf("HelpText() = %q, want Test help", got)
+	}
+}
+
+func TestNestedMenuEscapesInsteadOfQuitting(t *testing.T) {
+	m := newMenu()
+	m.nested = true
+
+	_, cmd := m.Update(press(tea.KeyEsc, ""))
+	if cmd == nil {
+		t.Fatal("esc returned no command")
+	}
+	msg, ok := cmd().(screen.ActionMsg)
+	if !ok || msg.Action != screen.ActionPop {
+		t.Fatalf("esc action = %+v, want pop", msg)
+	}
+	if len(m.Keys()) != 4 || m.Keys()[3].Help().Key != "esc" {
+		t.Fatalf("nested menu keys = %+v, want esc back", m.Keys())
+	}
+
+	updated, cmd := m.Update(press('q', "q"))
+	if cmd != nil {
+		t.Fatalf("q returned %v, want no command in a nested menu", cmd)
+	}
+	if updated != m {
+		t.Fatal("q changed the nested menu")
 	}
 }

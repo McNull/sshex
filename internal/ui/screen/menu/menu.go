@@ -1,4 +1,4 @@
-// Package menu implements the main menu of the sshex terminal UI.
+// Package menu implements the selectable menus of the sshex terminal UI.
 package menu
 
 import (
@@ -18,8 +18,8 @@ const (
 	minRowWidth   = 32
 )
 
-// Item is one entry of the main menu. Open is called when the item is selected
-// and returns the screen to push.
+// Item is one entry of a menu. Open is called when the item is selected and
+// returns the screen to push.
 type Item struct {
 	Kind        string
 	Title       string
@@ -27,11 +27,29 @@ type Item struct {
 	Open        func() screen.Screen
 }
 
-// Model is the main menu screen.
+// Options configures a menu.
+type Options struct {
+	Items           []Item
+	Version         string
+	UpdateAvailable string
+	Styles          *theme.Styles
+	// Title and Help label the menu in the help overlay.
+	Title string
+	Help  string
+	// Nested marks a menu pushed above another menu. Escape returns to the
+	// previous screen instead of quitting the UI, and q is not bound.
+	Nested bool
+}
+
+// Model is a menu screen.
 type Model struct {
 	items           []Item
 	keys            keys.Menu
+	back            keys.Binding
 	styles          *theme.Styles
+	title           string
+	help            string
+	nested          bool
 	version         string
 	updateAvailable string
 	selected        int
@@ -39,14 +57,26 @@ type Model struct {
 	height          int
 }
 
-// New returns a menu for the given items.
-func New(items []Item, version, updateAvailable string, styles *theme.Styles) *Model {
+// New returns a menu for the given options.
+func New(opts Options) *Model {
+	title := strings.TrimSpace(opts.Title)
+	if title == "" {
+		title = "Menu"
+	}
+	help := strings.TrimSpace(opts.Help)
+	if help == "" {
+		help = "Choose a section."
+	}
 	return &Model{
-		items:           items,
+		items:           opts.Items,
 		keys:            keys.DefaultMenu(),
-		styles:          styles,
-		version:         version,
-		updateAvailable: updateAvailable,
+		back:            keys.Back(),
+		styles:          opts.Styles,
+		title:           title,
+		help:            help,
+		nested:          opts.Nested,
+		version:         opts.Version,
+		updateAvailable: opts.UpdateAvailable,
 	}
 }
 
@@ -54,13 +84,16 @@ func New(items []Item, version, updateAvailable string, styles *theme.Styles) *M
 func (m *Model) Init() tea.Cmd { return nil }
 
 // Title implements screen.Screen.
-func (m *Model) Title() string { return "Main menu" }
+func (m *Model) Title() string { return m.title }
 
 // HelpText implements screen.HelpProvider.
-func (m *Model) HelpText() string { return "Choose a section to manage SSH connections and settings." }
+func (m *Model) HelpText() string { return m.help }
 
 // Keys implements screen.Screen.
 func (m *Model) Keys() []keys.Binding {
+	if m.nested {
+		return []keys.Binding{m.keys.Up, m.keys.Down, m.keys.Select, m.back}
+	}
 	return []keys.Binding{m.keys.Up, m.keys.Down, m.keys.Select, m.keys.Quit}
 }
 
@@ -81,7 +114,9 @@ func (m *Model) Update(msg tea.Msg) (screen.Screen, tea.Cmd) {
 	}
 
 	switch {
-	case keys.Matches(press, m.keys.Quit):
+	case m.nested && keys.Matches(press, m.back):
+		return m, screen.Pop()
+	case !m.nested && keys.Matches(press, m.keys.Quit):
 		return m, screen.Quit()
 	case keys.Matches(press, m.keys.Up):
 		m.selected = (m.selected - 1 + len(m.items)) % len(m.items)

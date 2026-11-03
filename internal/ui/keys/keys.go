@@ -96,7 +96,7 @@ func Help() Binding {
 	)
 }
 
-// Menu contains the bindings of the main menu.
+// Menu contains the bindings of a menu screen.
 type Menu struct {
 	Up     Binding
 	Down   Binding
@@ -104,7 +104,8 @@ type Menu struct {
 	Quit   Binding
 }
 
-// DefaultMenu returns the main menu bindings.
+// DefaultMenu returns the menu bindings. Nested menus use keys.Back instead of
+// Quit.
 func DefaultMenu() Menu {
 	return Menu{
 		Up: NewBinding(

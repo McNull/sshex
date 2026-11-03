@@ -108,7 +108,8 @@ type Model struct {
 
 var _ tea.Model = (*Model)(nil)
 
-// New builds the root model with the main menu as its root screen.
+// New builds the root model with the Client menu as its root inside a session
+// and the Server menu as its root everywhere else.
 func New(opts ModelOptions) *Model {
 	origin, client := headerIdentity(opts.Origin, opts.Client)
 	resolved := theme.Load(theme.Options{
@@ -192,8 +193,9 @@ func New(opts ModelOptions) *Model {
 		header:    header.New(&styles, opts.Version, origin, client),
 		footer:    footer.New(&styles),
 		help:      help.New(&styles),
-		stack: screen.NewStack(menu.New(
-			defaultMenuItems(&styles, screenDeps{
+		stack: screen.NewStack(newRootMenu(
+			&styles,
+			screenDeps{
 				connectSource:     source,
 				connectRunner:     runner,
 				sessionSource:     sessionSource,
@@ -206,10 +208,10 @@ func New(opts ModelOptions) *Model {
 				updateSource:      updateSource,
 				updateChecker:     updateChecker,
 				updateInstaller:   updateInstaller,
-			}),
+			},
 			opts.Version,
 			opts.UpdateAvailable,
-			&styles,
+			insideSession(),
 		)),
 	}
 	return m
@@ -392,7 +394,28 @@ func (m *Model) setDarkBackground(dark bool) {
 	*m.styles = theme.NewStyles(resolved)
 }
 
-func defaultMenuItems(styles *theme.Styles, deps screenDeps) []menu.Item {
+// insideSession reports whether the UI was started from inside an sshex
+// session. The session launcher exports SSHEX_SESSION for the remote shell, so
+// its presence distinguishes a client menu from the server menu.
+func insideSession() bool {
+	return strings.TrimSpace(os.Getenv("SSHEX_SESSION")) != ""
+}
+
+// currentSessionTarget labels the current session's screens with the target
+// recorded in its session file. An unreadable session file only costs the
+// label; the session id still scopes the screens.
+func currentSessionTarget() string {
+	file, err := sessionfile.Discover()
+	if err != nil {
+		return ""
+	}
+	return file.Target
+}
+
+// newRootMenu builds the menus and the screens they share. Outside a session
+// the Server menu is the root. Inside a session the Client menu is the root and
+// its Server entry pushes the same Server menu above it.
+func newRootMenu(styles *theme.Styles, deps screenDeps, version, updateAvailable string, inSession bool) screen.Screen {
 	// Keep one Connect screen for the lifetime of the UI so its query,
 	// selection and scroll position survive a trip back to the menu.
 	connectScreen := connect.New(connect.Options{
@@ -486,36 +509,77 @@ func defaultMenuItems(styles *theme.Styles, deps screenDeps) []menu.Item {
 		Installer: deps.updateInstaller,
 	})
 
-	return []menu.Item{
-		{
-			Kind:        "connect",
-			Title:       "Connect",
-			Description: "Open an SSH session",
-			Open:        func() screen.Screen { return connectScreen },
+	serverMenu := menu.New(menu.Options{
+		Items: []menu.Item{
+			{
+				Kind:        "connect",
+				Title:       "Connect",
+				Description: "Open an SSH session",
+				Open:        func() screen.Screen { return connectScreen },
+			},
+			{
+				Kind:        "sessions",
+				Title:       "Sessions",
+				Description: "Manage active sessions",
+				Open:        func() screen.Screen { return sessionsScreen },
+			},
+			{
+				Kind:        "tunnels",
+				Title:       "Tunnels",
+				Description: "Manage port forwards",
+				Open:        func() screen.Screen { return allTunnelsScreen },
+			},
+			{
+				Kind:        "commands",
+				Title:       "Commands",
+				Description: "Manage predefined commands",
+				Open:        func() screen.Screen { return commandsScreen },
+			},
+			{
+				Kind:        "update",
+				Title:       "Update",
+				Description: "Check for updates",
+				Open:        func() screen.Screen { return updateScreen },
+			},
 		},
-		{
-			Kind:        "sessions",
-			Title:       "Sessions",
-			Description: "Manage active sessions",
-			Open:        func() screen.Screen { return sessionsScreen },
-		},
-		{
-			Kind:        "tunnels",
-			Title:       "Tunnels",
-			Description: "Manage port forwards",
-			Open:        func() screen.Screen { return allTunnelsScreen },
-		},
-		{
-			Kind:        "commands",
-			Title:       "Commands",
-			Description: "Manage predefined commands",
-			Open:        func() screen.Screen { return commandsScreen },
-		},
-		{
-			Kind:        "update",
-			Title:       "Update",
-			Description: "Check for updates",
-			Open:        func() screen.Screen { return updateScreen },
-		},
+		Version:         version,
+		UpdateAvailable: updateAvailable,
+		Styles:          styles,
+		Title:           "Server menu",
+		Help:            "Choose a section to manage SSH connections and settings.",
+		Nested:          inSession,
+	})
+	if !inSession {
+		return serverMenu
 	}
+
+	sessionID := currentRemoteSessionID()
+	target := currentSessionTarget()
+	return menu.New(menu.Options{
+		Items: []menu.Item{
+			{
+				Kind:        "tunnels",
+				Title:       "Tunnels",
+				Description: "Manage this session's port forwards",
+				Open:        func() screen.Screen { return openSessionTunnels(sessionID, target) },
+			},
+			{
+				Kind:        "commands",
+				Title:       "Commands",
+				Description: "Manage predefined commands",
+				Open:        func() screen.Screen { return commandsScreen },
+			},
+			{
+				Kind:        "server",
+				Title:       "Server",
+				Description: "Open the server menu",
+				Open:        func() screen.Screen { return serverMenu },
+			},
+		},
+		Version:         version,
+		UpdateAvailable: updateAvailable,
+		Styles:          styles,
+		Title:           "Client menu",
+		Help:            "Manage the current session or open the server menu.",
+	})
 }
