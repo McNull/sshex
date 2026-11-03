@@ -1,0 +1,9 @@
+.git
+.gitignore
+.github
+dist
+*.zip
+*.test
+*.out
+coverage.*
+.DS_Store

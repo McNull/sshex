@@ -29,6 +29,19 @@ for the detected shell. It adds a single startup line that sources
 `~/.local/share/sshex/sshexrc.<shell>`, which keeps the startup file clean.
 Set `SSHEX_NO_COMPLETIONS=1` to skip the completions.
 
+### Docker
+
+A Linux image is available for `linux/amd64` and `linux/arm64`:
+
+```sh
+docker run --rm -it \
+  -v "$HOME/.ssh:/home/sshex/.ssh:ro" \
+  -v "$HOME/.config/sshex:/home/sshex/.config/sshex" \
+  mcnull/sshex
+```
+
+The entrypoint is `sshex`, so pass commands directly.
+
 ## Quick start
 
 ```sh
