@@ -65,3 +65,18 @@ func TestUnknownEmptyNameUsesDefault(t *testing.T) {
 		t.Fatalf("theme name = %q, want %q", got.Name, DefaultName)
 	}
 }
+
+func TestThemesDiffer(t *testing.T) {
+	seen := map[string]string{}
+	for _, name := range Names() {
+		got := Load(Options{Name: name, HasDarkBackground: true})
+		if got.Name != name {
+			t.Fatalf("Load(%q) resolved to %q", name, got.Name)
+		}
+		accent := fmt.Sprint(got.Tokens.Accent)
+		if other, ok := seen[accent]; ok {
+			t.Fatalf("%q and %q share accent %s", name, other, accent)
+		}
+		seen[accent] = name
+	}
+}

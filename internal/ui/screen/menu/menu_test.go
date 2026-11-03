@@ -194,3 +194,14 @@ func TestNestedMenuEscapesInsteadOfQuitting(t *testing.T) {
 		t.Fatal("q changed the nested menu")
 	}
 }
+
+func TestSelectNilScreenStaysOnMenu(t *testing.T) {
+	called := false
+	m := New(Options{Items: []Item{{Title: "Act", Open: func() screen.Screen {
+		called = true
+		return nil
+	}}}})
+	if _, cmd := m.Update(press(tea.KeyEnter, "")); cmd != nil || !called {
+		t.Fatalf("called = %v, cmd = %v; want action run and no push", called, cmd)
+	}
+}
