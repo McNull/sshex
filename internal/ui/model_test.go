@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -273,6 +274,20 @@ func TestModelQuitKeys(t *testing.T) {
 	_, cmd = m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if _, ok := run(t, cmd).(tea.QuitMsg); !ok {
 		t.Fatalf("ctrl+c message = %T, want tea.QuitMsg", run(t, cmd))
+	}
+}
+
+func TestModelQuitWithError(t *testing.T) {
+	m := newTestModel()
+	resize(t, m, 80, 24)
+
+	want := errors.New("exit status 255")
+	_, cmd := m.Update(screen.ActionMsg{Action: screen.ActionQuit, Err: want})
+	if _, ok := run(t, cmd).(tea.QuitMsg); !ok {
+		t.Fatalf("quit message = %T, want tea.QuitMsg", run(t, cmd))
+	}
+	if !errors.Is(m.Err(), want) {
+		t.Fatalf("Err() = %v, want %v", m.Err(), want)
 	}
 }
 

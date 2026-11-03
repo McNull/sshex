@@ -68,8 +68,16 @@ func Run(opts Options) error {
 		tea.WithInput(in),
 		tea.WithOutput(out),
 	)
-	_, err := program.Run()
-	return err
+	final, err := program.Run()
+	if err != nil {
+		return err
+	}
+	// A screen can quit with a failure, for example when an SSH session ends
+	// with an error. Report it once the terminal is restored.
+	if m, ok := final.(*Model); ok {
+		return m.Err()
+	}
+	return nil
 }
 
 func noColor(opts Options) bool {

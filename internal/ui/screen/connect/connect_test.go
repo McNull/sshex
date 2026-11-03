@@ -141,9 +141,9 @@ func TestEnterUsesFreeFormTarget(t *testing.T) {
 	if len(runner.targets) != 1 || runner.targets[0] != "user@example.com" {
 		t.Fatalf("targets = %v, want the typed target", runner.targets)
 	}
-	m.Update(cmd())
-	if !strings.Contains(m.View(), "session ended.") {
-		t.Fatalf("session result is missing:\n%s", m.View())
+	_, quit := m.Update(cmd())
+	if got := action(t, quit); got.Action != screen.ActionQuit || got.Err != nil {
+		t.Fatalf("session result = %+v, want a clean quit", got)
 	}
 }
 
@@ -321,16 +321,21 @@ func TestHostLoadErrorIsShown(t *testing.T) {
 	}
 }
 
-func TestRunnerErrorIsShown(t *testing.T) {
-	m := newScreen(fakeSource{hosts: testHosts()}, &fakeRunner{err: errors.New("exit status 255")})
+func TestRunnerErrorQuitsWithError(t *testing.T) {
+	runErr := errors.New("exit status 255")
+	m := newScreen(fakeSource{hosts: testHosts()}, &fakeRunner{err: runErr})
 	load(t, m)
 
 	typeText(m, "web")
 	_, cmd := m.Update(press(tea.KeyEnter, ""))
-	m.Update(cmd())
+	_, quit := m.Update(cmd())
 
-	if !strings.Contains(m.View(), "session failed: exit status 255") {
-		t.Fatalf("session error is missing:\n%s", m.View())
+	got := action(t, quit)
+	if got.Action != screen.ActionQuit {
+		t.Fatalf("action = %v, want quit", got.Action)
+	}
+	if !errors.Is(got.Err, runErr) {
+		t.Fatalf("error = %v, want %v", got.Err, runErr)
 	}
 }
 

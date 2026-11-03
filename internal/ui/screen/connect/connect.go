@@ -129,13 +129,10 @@ func (m *Model) Update(msg tea.Msg) (screen.Screen, tea.Cmd) {
 		m.refilter()
 		return m, nil
 	case FinishedMsg:
-		m.statusErr = msg.Err != nil
 		if msg.Err != nil {
-			m.status = "session failed: " + msg.Err.Error()
-		} else {
-			m.status = "session ended."
+			return m, screen.QuitWithError(msg.Err)
 		}
-		return m, nil
+		return m, screen.Quit()
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
@@ -430,7 +427,8 @@ func (m *Model) statusView() string {
 	return m.styles.ScreenHint.Render(count)
 }
 
-// FinishedMsg reports that a session started from the screen has ended.
+// FinishedMsg reports that a session started from the screen has ended. The
+// screen quits on either outcome; Err is reported after the UI closes.
 type FinishedMsg struct {
 	Err error
 }

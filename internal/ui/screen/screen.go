@@ -53,6 +53,9 @@ const (
 type ActionMsg struct {
 	Action Action
 	Screen Screen
+	// Err carries a failure to report after the UI exits. It is only set for
+	// ActionQuit.
+	Err error
 }
 
 // Push requests that s is pushed onto the stack.
@@ -80,5 +83,13 @@ func Replace(s Screen) tea.Cmd {
 func Quit() tea.Cmd {
 	return func() tea.Msg {
 		return ActionMsg{Action: ActionQuit}
+	}
+}
+
+// QuitWithError requests that the UI exits and reports err once the terminal
+// is restored.
+func QuitWithError(err error) tea.Cmd {
+	return func() tea.Msg {
+		return ActionMsg{Action: ActionQuit, Err: err}
 	}
 }

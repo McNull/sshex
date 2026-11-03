@@ -91,6 +91,8 @@ type Model struct {
 	stack     *screen.Stack
 	width     int
 	height    int
+	// quitErr is the failure reported by the screen that asked the UI to quit.
+	quitErr error
 }
 
 var _ tea.Model = (*Model)(nil)
@@ -200,6 +202,12 @@ func New(opts ModelOptions) *Model {
 	return m
 }
 
+// Err reports the failure that ended the UI, if any. It is only meaningful
+// after the program has exited.
+func (m *Model) Err() error {
+	return m.quitErr
+}
+
 // Init implements tea.Model. It asks the terminal for its background color so
 // the theme can adapt once the program owns the terminal.
 func (m *Model) Init() tea.Cmd {
@@ -289,6 +297,7 @@ func (m *Model) apply(action screen.ActionMsg) tea.Cmd {
 		m.stack.ReplaceTop(action.Screen)
 		return action.Screen.Init()
 	case screen.ActionQuit:
+		m.quitErr = action.Err
 		return tea.Quit
 	default:
 		return nil
