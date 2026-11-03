@@ -195,13 +195,13 @@ func TestNestedMenuEscapesInsteadOfQuitting(t *testing.T) {
 	}
 }
 
-func TestSelectNilScreenStaysOnMenu(t *testing.T) {
-	called := false
-	m := New(Options{Items: []Item{{Title: "Act", Open: func() screen.Screen {
-		called = true
+func TestRunItemActsInPlace(t *testing.T) {
+	ran := false
+	m := New(Options{Items: []Item{{Title: "Act", Run: func() tea.Cmd {
+		ran = true
 		return nil
 	}}}})
-	if _, cmd := m.Update(press(tea.KeyEnter, "")); cmd != nil || !called {
-		t.Fatalf("called = %v, cmd = %v; want action run and no push", called, cmd)
+	if _, cmd := m.Update(press(tea.KeyEnter, "")); cmd != nil || !ran {
+		t.Fatalf("ran = %v, cmd = %v; want action run and no push", ran, cmd)
 	}
 }

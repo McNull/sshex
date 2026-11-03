@@ -96,7 +96,7 @@ type Model struct {
 	themeName string
 	noColor   bool
 	dark      bool
-	saveTheme func(name string) error
+	themeSave themeSaver
 	global    keys.Global
 	header    header.Model
 	footer    footer.Model
@@ -145,7 +145,7 @@ func New(opts ModelOptions) *Model {
 		clientTarget: client,
 		localOrigin:  config.Origin(),
 		dark:         opts.HasDarkBackground,
-		saveTheme:    opts.SaveTheme,
+		themeSave:    themeSaver{save: opts.SaveTheme},
 	}
 	m.stack = screen.NewStack(newRootMenu(
 		&styles,
@@ -154,7 +154,7 @@ func New(opts ModelOptions) *Model {
 		opts.Version,
 		opts.UpdateAvailable,
 		inSession,
-		m.setTheme,
+		m,
 	))
 	m.refreshHeader()
 	return m
@@ -301,6 +301,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.BackgroundColorMsg:
 		m.setDarkBackground(msg.IsDark())
 		return m, nil
+	case themeSavedMsg:
+		m.themeSave.err = msg.err
+		return m, nil
 	case tea.KeyPressMsg:
 		if keys.Matches(msg, m.global.Quit) {
 			return m, tea.Quit
@@ -435,17 +438,6 @@ func (m *Model) setDarkBackground(dark bool) {
 	m.applyTheme()
 }
 
-// setTheme switches the color theme and persists the choice.
-func (m *Model) setTheme(name string) {
-	m.themeName = name
-	m.applyTheme()
-	if m.saveTheme != nil {
-		// ponytail: a failed save only loses the preference; surface it if
-		// users report themes not sticking.
-		_ = m.saveTheme(m.themeName)
-	}
-}
-
 func (m *Model) applyTheme() {
 	resolved := theme.Load(theme.Options{
 		Name:              m.themeName,
@@ -477,8 +469,8 @@ func currentSessionTarget() string {
 // newRootMenu builds the menus and the screens they share. Outside a session
 // the Server menu is the root. Inside a session the Client menu is the root and
 // its Server entry pushes a Server menu scoped to the local origin.
-func newRootMenu(styles *theme.Styles, clientDeps, originDeps screenDeps, version, updateAvailable string, inSession bool, setTheme func(string)) screen.Screen {
-	serverMenu := newServerMenu(styles, originDeps, version, updateAvailable, inSession, setTheme)
+func newRootMenu(styles *theme.Styles, clientDeps, originDeps screenDeps, version, updateAvailable string, inSession bool, themes themeSwitcher) screen.Screen {
+	serverMenu := newServerMenu(styles, originDeps, version, updateAvailable, inSession, themes)
 	if !inSession {
 		return serverMenu
 	}
@@ -486,7 +478,7 @@ func newRootMenu(styles *theme.Styles, clientDeps, originDeps screenDeps, versio
 }
 
 // newServerMenu builds the screens that manage the machine running the UI.
-func newServerMenu(styles *theme.Styles, deps screenDeps, version, updateAvailable string, nested bool, setTheme func(string)) screen.Screen {
+func newServerMenu(styles *theme.Styles, deps screenDeps, version, updateAvailable string, nested bool, themes themeSwitcher) screen.Screen {
 	// Keep one Connect screen for the lifetime of the UI so its query,
 	// selection and scroll position survive a trip back to the menu.
 	connectScreen := connect.New(connect.Options{
@@ -563,7 +555,7 @@ func newServerMenu(styles *theme.Styles, deps screenDeps, version, updateAvailab
 		Installer: deps.updateInstaller,
 	})
 
-	themesMenu := newThemesMenu(styles, setTheme, version, updateAvailable)
+	themesMenu := newThemesMenu(styles, themes, version, updateAvailable)
 
 	return menu.New(menu.Options{
 		Items: []menu.Item{
@@ -665,31 +657,6 @@ func newClientMenu(styles *theme.Styles, deps screenDeps, serverMenu screen.Scre
 		Title:           "Client menu",
 		Help:            "Manage the current session or open the server menu.",
 		Scope:           screen.ScopeClient,
-	})
-}
-
-// newThemesMenu lists the color themes; selecting one applies it in place.
-func newThemesMenu(styles *theme.Styles, setTheme func(string), version, updateAvailable string) screen.Screen {
-	var items []menu.Item
-	for _, name := range theme.Names() {
-		items = append(items, menu.Item{
-			Kind:  "theme",
-			Title: name,
-			Open: func() screen.Screen {
-				setTheme(name)
-				return nil
-			},
-		})
-	}
-	return menu.New(menu.Options{
-		Items:           items,
-		Version:         version,
-		UpdateAvailable: updateAvailable,
-		Styles:          styles,
-		Title:           "Themes",
-		Help:            "Choose a color theme for the interface.",
-		Nested:          true,
-		Scope:           screen.ScopeOrigin,
 	})
 }
 

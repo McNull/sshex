@@ -338,3 +338,24 @@ func TestSaveThemeKeepsOtherSections(t *testing.T) {
 		t.Fatalf("theme = %q, commands = %d", got.UI.Theme, len(got.Commands))
 	}
 }
+
+func TestSaveThemeKeepsComments(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yml")
+	src := "# my hosts\nserver:\n    transport: unix # keep\nui:\n    theme: mono\n"
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveTheme(path, "rose"); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	got := string(data)
+	for _, want := range []string{"# my hosts", "# keep", "theme: rose"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("config missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "mono") {
+		t.Fatalf("old theme still present:\n%s", got)
+	}
+}
