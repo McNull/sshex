@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"github.com/mcnull/sshex/internal/assets"
+	"github.com/mcnull/sshex/internal/config"
 	"github.com/mcnull/sshex/internal/ui"
 	"github.com/spf13/cobra"
 )
@@ -20,10 +21,22 @@ var uiCmd = &cobra.Command{
 // runUI starts the interactive interface for a command that has already
 // validated its arguments and flags.
 func runUI(cmd *cobra.Command) error {
+	path, err := config.Resolve(configFlag)
+	if err != nil {
+		return err
+	}
+	// --theme wins for this run; otherwise use the theme saved from the UI.
+	theme := uiTheme
+	if theme == "" {
+		if cfg, err := config.Load(path); err == nil {
+			theme = cfg.UI.Theme
+		}
+	}
 	return ui.Run(ui.Options{
 		Version:         assets.Version(),
 		UpdateAvailable: updateAvailableVersion(),
-		Theme:           uiTheme,
+		Theme:           theme,
+		SaveTheme:       func(name string) error { return config.SaveTheme(path, name) },
 		In:              cmd.InOrStdin(),
 		Out:             cmd.OutOrStdout(),
 	})

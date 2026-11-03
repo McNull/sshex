@@ -16,6 +16,23 @@ type Config struct {
 	Server   ServerConfig    `yaml:"server"`
 	Hosts    []HostConfig    `yaml:"hosts,omitempty"`
 	Commands []CommandConfig `yaml:"commands,omitempty"`
+	UI       UIConfig        `yaml:"ui,omitempty"`
+}
+
+// UIConfig holds the interactive interface preferences.
+type UIConfig struct {
+	Theme string `yaml:"theme,omitempty"`
+}
+
+// SaveTheme records the UI theme in the config at path. It reloads the file
+// first so edits made by another process survive.
+func SaveTheme(path, name string) error {
+	cfg, err := Load(path)
+	if err != nil {
+		return err
+	}
+	cfg.UI.Theme = name
+	return Save(path, cfg)
 }
 
 // CommandConfig is a predefined command executed on the origin machine.

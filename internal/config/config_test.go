@@ -319,3 +319,22 @@ func TestControlDirStaysShort(t *testing.T) {
 		t.Fatalf("ControlDir() = %q; control path too long for a unix socket", dir)
 	}
 }
+
+func TestSaveThemeKeepsOtherSections(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yml")
+	cfg := Default()
+	cfg.Commands = DefaultCommands()
+	if err := Save(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveTheme(path, "ocean"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.UI.Theme != "ocean" || len(got.Commands) != len(cfg.Commands) {
+		t.Fatalf("theme = %q, commands = %d", got.UI.Theme, len(got.Commands))
+	}
+}

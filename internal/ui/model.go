@@ -37,6 +37,7 @@ type ModelOptions struct {
 	Origin            string
 	Client            string
 	Theme             string
+	SaveTheme         func(name string) error
 	HasDarkBackground bool
 	NoColor           bool
 	// HostSource supplies the Connect screen. Nil uses the local SSH files.
@@ -95,6 +96,7 @@ type Model struct {
 	themeName string
 	noColor   bool
 	dark      bool
+	saveTheme func(name string) error
 	global    keys.Global
 	header    header.Model
 	footer    footer.Model
@@ -143,6 +145,7 @@ func New(opts ModelOptions) *Model {
 		clientTarget: client,
 		localOrigin:  config.Origin(),
 		dark:         opts.HasDarkBackground,
+		saveTheme:    opts.SaveTheme,
 	}
 	m.stack = screen.NewStack(newRootMenu(
 		&styles,
@@ -432,11 +435,15 @@ func (m *Model) setDarkBackground(dark bool) {
 	m.applyTheme()
 }
 
-// setTheme switches the color theme for the rest of the run.
-// ponytail: not persisted; add a config key when users want it to stick.
+// setTheme switches the color theme and persists the choice.
 func (m *Model) setTheme(name string) {
 	m.themeName = name
 	m.applyTheme()
+	if m.saveTheme != nil {
+		// ponytail: a failed save only loses the preference; surface it if
+		// users report themes not sticking.
+		_ = m.saveTheme(m.themeName)
+	}
 }
 
 func (m *Model) applyTheme() {
