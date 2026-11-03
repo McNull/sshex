@@ -125,6 +125,8 @@ func mono(dark bool) Tokens {
 type Styles struct {
 	Brand                  lipgloss.Style
 	BrandAccent            lipgloss.Style
+	HeaderLabel            lipgloss.Style
+	HeaderIdentity         lipgloss.Style
 	Version                lipgloss.Style
 	Rule                   lipgloss.Style
 	FooterKey              lipgloss.Style
@@ -167,6 +169,8 @@ func NewStyles(t Theme) Styles {
 	return Styles{
 		Brand:           lipgloss.NewStyle().Bold(true).Foreground(t.Tokens.Foreground),
 		BrandAccent:     lipgloss.NewStyle().Bold(true).Foreground(t.Tokens.Accent),
+		HeaderLabel:     lipgloss.NewStyle().Foreground(t.Tokens.Muted),
+		HeaderIdentity:  lipgloss.NewStyle().Foreground(t.Tokens.Accent).Bold(true),
 		Version:         lipgloss.NewStyle().Foreground(t.Tokens.Muted),
 		Rule:            lipgloss.NewStyle().Foreground(t.Tokens.Border),
 		FooterKey:       lipgloss.NewStyle().Foreground(t.Tokens.Foreground).Bold(true),
@@ -213,6 +217,8 @@ func noColorStyles() Styles {
 	return Styles{
 		Brand:           lipgloss.NewStyle().Bold(true),
 		BrandAccent:     lipgloss.NewStyle().Bold(true),
+		HeaderLabel:     lipgloss.NewStyle(),
+		HeaderIdentity:  lipgloss.NewStyle().Bold(true),
 		Version:         lipgloss.NewStyle(),
 		Rule:            lipgloss.NewStyle(),
 		FooterKey:       lipgloss.NewStyle().Bold(true),

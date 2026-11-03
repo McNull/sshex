@@ -44,6 +44,7 @@ func run(t *testing.T, cmd tea.Cmd) tea.Msg {
 }
 
 func TestModelRendersFullWindow(t *testing.T) {
+	t.Setenv("SSHEX_SESSION", "")
 	m := newTestModel()
 	resize(t, m, 80, 24)
 
@@ -57,8 +58,8 @@ func TestModelRendersFullWindow(t *testing.T) {
 			t.Fatalf("line %d width = %d, want <= 80", i, width)
 		}
 	}
-	if header := ansi.Strip(lines[0]); !strings.Contains(header, "sshex") || strings.Contains(header, "v1.2.3") {
-		t.Fatalf("header = %q, want wordmark without the version", header)
+	if header := ansi.Strip(lines[0]); !strings.Contains(header, "sshex: v1.2.3") {
+		t.Fatalf("header = %q, want wordmark with version", header)
 	}
 	if !strings.Contains(content, "┌──────┐") {
 		t.Fatal("menu logo is missing")
@@ -71,6 +72,25 @@ func TestModelRendersFullWindow(t *testing.T) {
 	}
 	if !strings.Contains(lines[len(lines)-1], "select") {
 		t.Fatalf("footer = %q, want key help", lines[len(lines)-1])
+	}
+}
+
+func TestModelRendersHeaderIdentity(t *testing.T) {
+	t.Setenv("SSHEX_SESSION", "")
+	m := New(ModelOptions{
+		Origin:            "broker-host",
+		Client:            "alice@ssh01",
+		HasDarkBackground: true,
+		NoColor:           true,
+	})
+	resize(t, m, 80, 24)
+
+	header := ansi.Strip(strings.Split(m.View().Content, "\n")[0])
+	if !strings.Contains(header, "client: alice@ssh01 origin: broker-host") {
+		t.Fatalf("header = %q, want origin and client identity", header)
+	}
+	if lipgloss.Width(header) != 80 {
+		t.Fatalf("header width = %d, want 80", lipgloss.Width(header))
 	}
 }
 

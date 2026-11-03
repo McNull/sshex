@@ -1,10 +1,15 @@
 package ui
 
 import (
+	"os"
+	"strings"
+
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/mcnull/sshex/internal/config"
+	"github.com/mcnull/sshex/internal/sessionfile"
 	"github.com/mcnull/sshex/internal/ui/component/footer"
 	"github.com/mcnull/sshex/internal/ui/component/header"
 	"github.com/mcnull/sshex/internal/ui/keys"
@@ -25,8 +30,12 @@ const (
 
 // ModelOptions configures the root model.
 type ModelOptions struct {
-	Version           string
-	UpdateAvailable   string
+	Version         string
+	UpdateAvailable string
+	// Origin and Client override the header identity. Empty values are resolved
+	// from the local host and the current SSHEX_SESSION, respectively.
+	Origin            string
+	Client            string
 	Theme             string
 	HasDarkBackground bool
 	NoColor           bool
@@ -99,6 +108,7 @@ var _ tea.Model = (*Model)(nil)
 
 // New builds the root model with the main menu as its root screen.
 func New(opts ModelOptions) *Model {
+	origin, client := headerIdentity(opts.Origin, opts.Client)
 	resolved := theme.Load(theme.Options{
 		Name:              opts.Theme,
 		HasDarkBackground: opts.HasDarkBackground,
@@ -177,7 +187,7 @@ func New(opts ModelOptions) *Model {
 		themeName: resolved.Name,
 		noColor:   resolved.NoColor,
 		global:    keys.DefaultGlobal(),
-		header:    header.New(&styles),
+		header:    header.New(&styles, opts.Version, origin, client),
 		footer:    footer.New(&styles),
 		stack: screen.NewStack(menu.New(
 			defaultMenuItems(&styles, screenDeps{
@@ -200,6 +210,23 @@ func New(opts ModelOptions) *Model {
 		)),
 	}
 	return m
+}
+
+func headerIdentity(origin, client string) (string, string) {
+	if strings.TrimSpace(os.Getenv("SSHEX_SESSION")) != "" {
+		if file, err := sessionfile.Discover(); err == nil {
+			if origin == "" {
+				origin = file.Origin
+			}
+			if client == "" {
+				client = file.Target
+			}
+		}
+	}
+	if origin == "" {
+		origin = config.Origin()
+	}
+	return origin, client
 }
 
 // Err reports the failure that ended the UI, if any. It is only meaningful
