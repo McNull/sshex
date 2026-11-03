@@ -19,7 +19,7 @@ const (
 )
 
 // Item is one entry of a menu. Open is called when the item is selected and
-// returns the screen to push.
+// returns the screen to push, or nil to stay on the menu.
 type Item struct {
 	Kind        string
 	Title       string
@@ -137,7 +137,12 @@ func (m *Model) Update(msg tea.Msg) (screen.Screen, tea.Cmd) {
 		if item.Open == nil {
 			return m, nil
 		}
-		return m, screen.Push(item.Open())
+		// An item may act in place instead of opening a screen.
+		next := item.Open()
+		if next == nil {
+			return m, nil
+		}
+		return m, screen.Push(next)
 	}
 	return m, nil
 }

@@ -94,6 +94,7 @@ type Model struct {
 	styles    *theme.Styles
 	themeName string
 	noColor   bool
+	dark      bool
 	global    keys.Global
 	header    header.Model
 	footer    footer.Model
@@ -141,15 +142,17 @@ func New(opts ModelOptions) *Model {
 		clientOrigin: origin,
 		clientTarget: client,
 		localOrigin:  config.Origin(),
-		stack: screen.NewStack(newRootMenu(
-			&styles,
-			clientDeps,
-			originDeps,
-			opts.Version,
-			opts.UpdateAvailable,
-			inSession,
-		)),
+		dark:         opts.HasDarkBackground,
 	}
+	m.stack = screen.NewStack(newRootMenu(
+		&styles,
+		clientDeps,
+		originDeps,
+		opts.Version,
+		opts.UpdateAvailable,
+		inSession,
+		m.setTheme,
+	))
 	m.refreshHeader()
 	return m
 }
@@ -425,11 +428,24 @@ func (m *Model) contentSize() (int, int) {
 // setDarkBackground re-resolves the theme. Every screen holds a pointer to the
 // same Styles value, so changing it here updates the whole UI.
 func (m *Model) setDarkBackground(dark bool) {
+	m.dark = dark
+	m.applyTheme()
+}
+
+// setTheme switches the color theme for the rest of the run.
+// ponytail: not persisted; add a config key when users want it to stick.
+func (m *Model) setTheme(name string) {
+	m.themeName = name
+	m.applyTheme()
+}
+
+func (m *Model) applyTheme() {
 	resolved := theme.Load(theme.Options{
 		Name:              m.themeName,
-		HasDarkBackground: dark,
+		HasDarkBackground: m.dark,
 		NoColor:           m.noColor,
 	})
+	m.themeName = resolved.Name
 	*m.styles = theme.NewStyles(resolved)
 }
 
@@ -454,8 +470,8 @@ func currentSessionTarget() string {
 // newRootMenu builds the menus and the screens they share. Outside a session
 // the Server menu is the root. Inside a session the Client menu is the root and
 // its Server entry pushes a Server menu scoped to the local origin.
-func newRootMenu(styles *theme.Styles, clientDeps, originDeps screenDeps, version, updateAvailable string, inSession bool) screen.Screen {
-	serverMenu := newServerMenu(styles, originDeps, version, updateAvailable, inSession)
+func newRootMenu(styles *theme.Styles, clientDeps, originDeps screenDeps, version, updateAvailable string, inSession bool, setTheme func(string)) screen.Screen {
+	serverMenu := newServerMenu(styles, originDeps, version, updateAvailable, inSession, setTheme)
 	if !inSession {
 		return serverMenu
 	}
@@ -463,7 +479,7 @@ func newRootMenu(styles *theme.Styles, clientDeps, originDeps screenDeps, versio
 }
 
 // newServerMenu builds the screens that manage the machine running the UI.
-func newServerMenu(styles *theme.Styles, deps screenDeps, version, updateAvailable string, nested bool) screen.Screen {
+func newServerMenu(styles *theme.Styles, deps screenDeps, version, updateAvailable string, nested bool, setTheme func(string)) screen.Screen {
 	// Keep one Connect screen for the lifetime of the UI so its query,
 	// selection and scroll position survive a trip back to the menu.
 	connectScreen := connect.New(connect.Options{
@@ -540,6 +556,8 @@ func newServerMenu(styles *theme.Styles, deps screenDeps, version, updateAvailab
 		Installer: deps.updateInstaller,
 	})
 
+	themesMenu := newThemesMenu(styles, setTheme, version, updateAvailable)
+
 	return menu.New(menu.Options{
 		Items: []menu.Item{
 			{
@@ -571,6 +589,12 @@ func newServerMenu(styles *theme.Styles, deps screenDeps, version, updateAvailab
 				Title:       "Update",
 				Description: "Check for updates",
 				Open:        func() screen.Screen { return updateScreen },
+			},
+			{
+				Kind:        "themes",
+				Title:       "Themes",
+				Description: "Choose a color theme",
+				Open:        func() screen.Screen { return themesMenu },
 			},
 		},
 		Version:         version,
@@ -634,6 +658,31 @@ func newClientMenu(styles *theme.Styles, deps screenDeps, serverMenu screen.Scre
 		Title:           "Client menu",
 		Help:            "Manage the current session or open the server menu.",
 		Scope:           screen.ScopeClient,
+	})
+}
+
+// newThemesMenu lists the color themes; selecting one applies it in place.
+func newThemesMenu(styles *theme.Styles, setTheme func(string), version, updateAvailable string) screen.Screen {
+	var items []menu.Item
+	for _, name := range theme.Names() {
+		items = append(items, menu.Item{
+			Kind:  "theme",
+			Title: name,
+			Open: func() screen.Screen {
+				setTheme(name)
+				return nil
+			},
+		})
+	}
+	return menu.New(menu.Options{
+		Items:           items,
+		Version:         version,
+		UpdateAvailable: updateAvailable,
+		Styles:          styles,
+		Title:           "Themes",
+		Help:            "Choose a color theme for the interface.",
+		Nested:          true,
+		Scope:           screen.ScopeOrigin,
 	})
 }
 
