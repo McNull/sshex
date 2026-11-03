@@ -265,11 +265,11 @@ func TestExecStreamsOutput(t *testing.T) {
 	ctx := context.Background()
 	env := newTestEnv()
 	seedSession(t, env)
-	if err := env.commands.Create(ctx, model.Command{Name: "code", Command: `printf '%s' "${@:-${REMOTE_CWD}}"`}); err != nil {
+	if err := env.commands.Create(ctx, model.Command{Name: "code", Command: `printf '%s:%s' "${REMOTE_TARGET_KIND}" "${REMOTE_TARGET}"`}); err != nil {
 		t.Fatalf("seed command: %v", err)
 	}
 
-	rec := do(t, env.handler, http.MethodPost, "/sessions/s1/exec", `{"name":"code","cwd":"/remote"}`, true)
+	rec := do(t, env.handler, http.MethodPost, "/sessions/s1/exec", `{"name":"code","cwd":"/remote","target":"/remote/file.txt","target_kind":"file"}`, true)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
@@ -277,10 +277,10 @@ func TestExecStreamsOutput(t *testing.T) {
 	if len(frames) < 3 {
 		t.Fatalf("frames = %+v, want command, stdout and exit", frames)
 	}
-	if frames[0].Command != `printf '%s' "/remote"` {
+	if frames[0].Command != `printf '%s:%s' "file" "/remote/file.txt"` {
 		t.Fatalf("first frame command = %q, want rendered command", frames[0].Command)
 	}
-	if frames[1].Stream != "stdout" || frames[1].Data != "/remote" {
+	if frames[1].Stream != "stdout" || frames[1].Data != "file:/remote/file.txt" {
 		t.Fatalf("stdout frame = %+v", frames[1])
 	}
 	last := frames[len(frames)-1]

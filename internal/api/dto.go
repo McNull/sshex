@@ -143,10 +143,12 @@ func NewTunnelResponse(tunnel model.Tunnel) TunnelResponse {
 
 // ExecRequest is the body of an exec request from a remote shell.
 type ExecRequest struct {
-	Name string   `json:"name"`
-	Args []string `json:"args,omitempty"`
-	Cwd  string   `json:"cwd,omitempty"`
-	User string   `json:"user,omitempty"`
+	Name       string   `json:"name"`
+	Args       []string `json:"args,omitempty"`
+	Target     string   `json:"target,omitempty"`
+	TargetKind string   `json:"target_kind,omitempty"`
+	Cwd        string   `json:"cwd,omitempty"`
+	User       string   `json:"user,omitempty"`
 }
 
 // ExecFrame is one NDJSON frame of an exec response. Command carries the

@@ -27,11 +27,14 @@ var execCmd = &cobra.Command{
 		}
 		home, _ := os.UserHomeDir()
 		execArgs := pathx.ExpandArgs(cwd, home, args[1:])
+		target := pathx.ResolveTarget(cwd, home, args[1:])
 		code, err := c.Exec(cmd.Context(), api.ExecRequest{
-			Name: args[0],
-			Args: execArgs,
-			Cwd:  cwd,
-			User: os.Getenv("USER"),
+			Name:       args[0],
+			Args:       execArgs,
+			Target:     target,
+			TargetKind: pathx.ClassifyTarget(target),
+			Cwd:        cwd,
+			User:       os.Getenv("USER"),
 		}, cmd.OutOrStdout(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err

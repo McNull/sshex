@@ -10,6 +10,7 @@ import (
 
 	"github.com/mcnull/sshex/internal/errs"
 	"github.com/mcnull/sshex/internal/model"
+	"github.com/mcnull/sshex/internal/pathx"
 	"github.com/mcnull/sshex/internal/repository"
 	"github.com/mcnull/sshex/internal/repository/memory"
 )
@@ -55,7 +56,7 @@ func TestCommandServiceExecute(t *testing.T) {
 	var stdout, stderr, notice bytes.Buffer
 	session := model.Session{ID: "s1", User: "bob", Host: "ssh01", Port: 2222, Origin: "laptop"}
 	code, err := svc.Execute(ctx, session, ExecRequest{
-		SessionID: "s1", Name: "code", Args: []string{"/path"}, Cwd: "/home/bob", User: "fallback",
+		SessionID: "s1", Name: "code", Args: []string{"/path"}, Target: "/path", TargetKind: pathx.KindFolder, Cwd: "/home/bob", User: "fallback",
 	}, ExecOutput{Command: &notice, Stdout: &stdout, Stderr: &stderr})
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
@@ -73,7 +74,7 @@ func TestCommandServiceExecute(t *testing.T) {
 		t.Fatalf("executor args = %v, want [/path]", executor.args)
 	}
 	env := strings.Join(executor.env, "\n")
-	for _, want := range []string{"REMOTE_CWD=/home/bob", "REMOTE_USER=bob", "REMOTE_HOST=ssh01", "REMOTE_PORT=2222", "REMOTE_SESSION=s1", "REMOTE_ORIGIN=laptop"} {
+	for _, want := range []string{"REMOTE_CWD=/home/bob", "REMOTE_USER=bob", "REMOTE_HOST=ssh01", "REMOTE_PORT=2222", "REMOTE_SESSION=s1", "REMOTE_ORIGIN=laptop", "REMOTE_TARGET=/path", "REMOTE_TARGET_KIND=folder"} {
 		if !strings.Contains(env, want) {
 			t.Fatalf("executor env missing %q:\n%s", want, env)
 		}

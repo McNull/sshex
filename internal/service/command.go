@@ -10,15 +10,18 @@ import (
 
 	"github.com/mcnull/sshex/internal/errs"
 	"github.com/mcnull/sshex/internal/model"
+	"github.com/mcnull/sshex/internal/pathx"
 )
 
 // ExecRequest describes a request to run a predefined command on the origin.
 type ExecRequest struct {
-	SessionID string
-	Name      string
-	Args      []string
-	Cwd       string
-	User      string
+	SessionID  string
+	Name       string
+	Args       []string
+	Target     string
+	TargetKind string
+	Cwd        string
+	User       string
 }
 
 type CommandServiceConfig struct {
@@ -87,6 +90,14 @@ func remoteEnv(session model.Session, req ExecRequest) []string {
 	if port == 0 {
 		port = 22
 	}
+	target := req.Target
+	if target == "" {
+		target = req.Cwd
+	}
+	kind := req.TargetKind
+	if kind != pathx.KindFolder && kind != pathx.KindFile {
+		kind = pathx.KindFile
+	}
 	return []string{
 		"REMOTE_CWD=" + req.Cwd,
 		"REMOTE_USER=" + user,
@@ -94,6 +105,8 @@ func remoteEnv(session model.Session, req ExecRequest) []string {
 		"REMOTE_PORT=" + strconv.Itoa(port),
 		"REMOTE_SESSION=" + session.ID,
 		"REMOTE_ORIGIN=" + session.Origin,
+		"REMOTE_TARGET=" + target,
+		"REMOTE_TARGET_KIND=" + kind,
 	}
 }
 

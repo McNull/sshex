@@ -67,7 +67,7 @@ func NewForm(opts FormOptions) *Form {
 	}
 
 	form.inputs[fieldName] = newInput(opts.Styles, "name › ", "code")
-	form.inputs[fieldCommand] = newInput(opts.Styles, "command › ", "code --folder-uri \"...\"")
+	form.inputs[fieldCommand] = newInput(opts.Styles, "command › ", "code --${REMOTE_TARGET_KIND}-uri \"...\"")
 	form.inputs[fieldAlias] = newInput(opts.Styles, "alias › ", "optional")
 
 	if opts.Original != nil {

@@ -273,11 +273,13 @@ func (h *Handlers) Exec(w http.ResponseWriter, r *http.Request) {
 	sink := newExecSink(w, flusher)
 	w.Header().Set("Content-Type", "application/x-ndjson")
 	code, err := h.services.Commands.Execute(r.Context(), session, service.ExecRequest{
-		SessionID: sessionID,
-		Name:      req.Name,
-		Args:      req.Args,
-		Cwd:       req.Cwd,
-		User:      req.User,
+		SessionID:  sessionID,
+		Name:       req.Name,
+		Args:       req.Args,
+		Target:     req.Target,
+		TargetKind: req.TargetKind,
+		Cwd:        req.Cwd,
+		User:       req.User,
 	}, service.ExecOutput{
 		Command: sink.commandWriter(),
 		Stdout:  sink.writer("stdout"),

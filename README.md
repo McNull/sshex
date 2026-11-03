@@ -59,7 +59,7 @@ Commands are templates stored on the origin. `sshex exec` runs them locally with
 ### Command Management
 
 ```sh
-$ sshex command add --alias code 'code --folder-uri "vscode-remote://ssh-remote+${REMOTE_HOST}${@:-${REMOTE_CWD}}"'
+$ sshex command add --alias code 'code --${REMOTE_TARGET_KIND}-uri "vscode-remote://ssh-remote+${REMOTE_HOST}${REMOTE_TARGET}"'
 $ sshex command list
 $ sshex command edit code
 ```
@@ -71,9 +71,27 @@ Add, edit, list, enable, disable and remove commands. An `--alias` makes the nam
 ```sh
 $ sshex exec code /srv/app
 Executing `code --folder-uri "vscode-remote://ssh-remote+server/srv/app"` ...
+
+$ sshex exec code /srv/app/main.go
+Executing `code --file-uri "vscode-remote://ssh-remote+server/srv/app/main.go"` ...
 ```
 
-Runs on the origin, not the remote. Arguments are passed positionally, so they cannot inject shell code. Templates can use `${REMOTE_CWD}`, `${REMOTE_USER}`, `${REMOTE_HOST}`, `${REMOTE_PORT}`, `${REMOTE_SESSION}`, `${REMOTE_ORIGIN}` and `${@}`.
+Runs on the origin, not the remote. Arguments are passed positionally, so they cannot inject shell code. The first argument is the target; the remote checks whether it is a directory and selects `folder` or `file`.
+
+Templates receive these environment variables:
+
+| Variable | Description |
+| --- | --- |
+| `${REMOTE_CWD}` | Working directory where `sshex exec` was invoked. |
+| `${REMOTE_USER}` | Remote user. |
+| `${REMOTE_HOST}` | Remote host (the ssh alias). |
+| `${REMOTE_PORT}` | Remote port. |
+| `${REMOTE_SESSION}` | Session id. |
+| `${REMOTE_ORIGIN}` | Origin machine. |
+| `${REMOTE_TARGET}` | Resolved first argument, or the remote working directory when no argument was given. |
+| `${REMOTE_TARGET_KIND}` | `folder` if the target is an existing directory, otherwise `file`. |
+
+Positional arguments are available as `${0}` (the command name), `${1}`–`${10}`, and `${@}` (all arguments). They are passed separately and are not interpolated into the command line.
 
 ## Tunnel Management
 

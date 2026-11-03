@@ -143,6 +143,8 @@ var commandVariables = []commandVariable{
 	{"${REMOTE_PORT}", "The remote port"},
 	{"${REMOTE_SESSION}", "The session id"},
 	{"${REMOTE_ORIGIN}", "The origin machine"},
+	{"${REMOTE_TARGET}", "The target path, or the remote working directory"},
+	{"${REMOTE_TARGET_KIND}", "The target kind: folder or file"},
 	{"${0}, ${1}...${10}", "Positional arguments (${0} is the command name)"},
 	{"${@}", "All positional arguments"},
 }
@@ -172,14 +174,14 @@ var commandExamples = []commandExample{
 	{
 		name:    "code",
 		alias:   "code",
-		desc:    "Start vscode using the optional directory argument as project",
-		command: `code --folder-uri "vscode-remote://ssh-remote+${REMOTE_HOST}${@:-${REMOTE_CWD}}"`,
+		desc:    "Start vscode using the optional target argument",
+		command: `code --${REMOTE_TARGET_KIND}-uri "vscode-remote://ssh-remote+${REMOTE_HOST}${REMOTE_TARGET}"`,
 	},
 	{
 		name:    "zed",
 		alias:   "zed",
-		desc:    "Start zed using the optional directory argument as project",
-		command: `zed "ssh://${REMOTE_USER}@${REMOTE_HOST}${@:-${REMOTE_CWD}}"`,
+		desc:    "Start zed using the optional target argument",
+		command: `zed "ssh://${REMOTE_USER}@${REMOTE_HOST}${REMOTE_TARGET}"`,
 	},
 }
 
