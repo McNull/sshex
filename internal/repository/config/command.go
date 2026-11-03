@@ -2,7 +2,6 @@ package configrepo
 
 import (
 	"context"
-	"sync"
 
 	"github.com/mcnull/sshex/internal/config"
 	"github.com/mcnull/sshex/internal/model"
@@ -13,7 +12,6 @@ import (
 // reloads the file on every operation so a running broker observes edits made
 // by another process, and it preserves the non-command sections on save.
 type CommandRepository struct {
-	mu   sync.Mutex
 	path string
 }
 
@@ -22,8 +20,8 @@ func NewCommandRepository(path string) *CommandRepository {
 }
 
 func (r *CommandRepository) Create(_ context.Context, command model.Command) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	config.FileMu.Lock()
+	defer config.FileMu.Unlock()
 	cfg, err := config.Load(r.path)
 	if err != nil {
 		return err
@@ -39,8 +37,8 @@ func (r *CommandRepository) Create(_ context.Context, command model.Command) err
 }
 
 func (r *CommandRepository) Get(_ context.Context, name string) (model.Command, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	config.FileMu.Lock()
+	defer config.FileMu.Unlock()
 	cfg, err := config.Load(r.path)
 	if err != nil {
 		return model.Command{}, err
@@ -53,8 +51,8 @@ func (r *CommandRepository) Get(_ context.Context, name string) (model.Command, 
 }
 
 func (r *CommandRepository) List(_ context.Context) ([]model.Command, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	config.FileMu.Lock()
+	defer config.FileMu.Unlock()
 	cfg, err := config.Load(r.path)
 	if err != nil {
 		return nil, err
@@ -67,8 +65,8 @@ func (r *CommandRepository) List(_ context.Context) ([]model.Command, error) {
 }
 
 func (r *CommandRepository) Update(_ context.Context, name string, command model.Command) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	config.FileMu.Lock()
+	defer config.FileMu.Unlock()
 	cfg, err := config.Load(r.path)
 	if err != nil {
 		return err
@@ -92,8 +90,8 @@ func (r *CommandRepository) Update(_ context.Context, name string, command model
 }
 
 func (r *CommandRepository) Delete(_ context.Context, name string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	config.FileMu.Lock()
+	defer config.FileMu.Unlock()
 	cfg, err := config.Load(r.path)
 	if err != nil {
 		return err

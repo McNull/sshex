@@ -19,12 +19,22 @@ const (
 )
 
 // Item is one entry of a menu. Open is called when the item is selected and
-// returns the screen to push, or nil to stay on the menu.
+// returns the screen to push. Run, when set, is called instead and acts in
+// place. Describe, when set, replaces Description on every render.
 type Item struct {
 	Kind        string
 	Title       string
 	Description string
+	Describe    func() string
 	Open        func() screen.Screen
+	Run         func() tea.Cmd
+}
+
+func (i Item) description() string {
+	if i.Describe != nil {
+		return i.Describe()
+	}
+	return i.Description
 }
 
 // Options configures a menu.
@@ -41,6 +51,8 @@ type Options struct {
 	Nested bool
 	// Scope identifies the origin this menu manages.
 	Scope screen.Scope
+	// Selected is the initially highlighted item.
+	Selected int
 }
 
 // Model is a menu screen.
@@ -81,6 +93,7 @@ func New(opts Options) *Model {
 		scope:           opts.Scope,
 		version:         opts.Version,
 		updateAvailable: opts.UpdateAvailable,
+		selected:        min(max(opts.Selected, 0), max(len(opts.Items)-1, 0)),
 	}
 }
 
@@ -134,15 +147,13 @@ func (m *Model) Update(msg tea.Msg) (screen.Screen, tea.Cmd) {
 			return m, nil
 		}
 		item := m.items[m.selected]
+		if item.Run != nil {
+			return m, item.Run()
+		}
 		if item.Open == nil {
 			return m, nil
 		}
-		// An item may act in place instead of opening a screen.
-		next := item.Open()
-		if next == nil {
-			return m, nil
-		}
-		return m, screen.Push(next)
+		return m, screen.Push(item.Open())
 	}
 	return m, nil
 }
@@ -220,7 +231,7 @@ func (m *Model) row(item Item, selected bool, rowWidth, innerWidth, titleWidth, 
 		marker = "›"
 	}
 	title := padRight(item.Title, titleWidth)
-	desc := padRight(truncate(item.Description, descWidth), descWidth)
+	desc := padRight(truncate(item.description(), descWidth), descWidth)
 
 	if selected {
 		line := padRight(marker+" "+title+"  "+desc, innerWidth)
