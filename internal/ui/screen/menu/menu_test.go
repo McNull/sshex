@@ -205,3 +205,59 @@ func TestRunItemActsInPlace(t *testing.T) {
 		t.Fatalf("ran = %v, cmd = %v; want action run and no push", ran, cmd)
 	}
 }
+
+func TestMenuNavigationPreviewsHighlightedItem(t *testing.T) {
+	var previewed []string
+	m := New(Options{Items: []Item{
+		{Title: "One", Preview: func() { previewed = append(previewed, "one") }},
+		{Title: "Two", Preview: func() { previewed = append(previewed, "two") }},
+		{Title: "Three", Preview: func() { previewed = append(previewed, "three") }},
+	}})
+
+	if len(previewed) != 0 {
+		t.Fatalf("previews before navigation = %v, want none", previewed)
+	}
+
+	m.Update(press(tea.KeyDown, ""))
+	m.Update(press(tea.KeyDown, ""))
+	m.Update(press(tea.KeyUp, ""))
+
+	want := []string{"two", "three", "two"}
+	if len(previewed) != len(want) {
+		t.Fatalf("previews = %v, want %v", previewed, want)
+	}
+	for i := range want {
+		if previewed[i] != want[i] {
+			t.Fatalf("previews = %v, want %v", previewed, want)
+		}
+	}
+}
+
+func TestMenuPreviewDoesNotRunOnSelect(t *testing.T) {
+	previewed, ran := false, false
+	m := New(Options{Items: []Item{{
+		Title:   "Act",
+		Preview: func() { previewed = true },
+		Run:     func() tea.Cmd { ran = true; return nil },
+	}}})
+	if _, _ = m.Update(press(tea.KeyEnter, "")); !ran || previewed {
+		t.Fatalf("ran = %v, previewed = %v; want run without preview", ran, previewed)
+	}
+}
+
+func TestNestedMenuCallsOnBack(t *testing.T) {
+	backed := false
+	m := New(Options{
+		Nested: true,
+		OnBack: func() { backed = true },
+		Items:  []Item{{Title: "One"}},
+	})
+	_, cmd := m.Update(press(tea.KeyEsc, ""))
+	if !backed {
+		t.Fatal("onBack was not called before leaving the menu")
+	}
+	msg, ok := cmd().(screen.ActionMsg)
+	if !ok || msg.Action != screen.ActionPop {
+		t.Fatalf("esc action = %+v, want pop", msg)
+	}
+}

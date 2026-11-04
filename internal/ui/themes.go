@@ -16,7 +16,9 @@ import (
 type themeSwitcher interface {
 	currentTheme() string
 	themeSaveErr() error
+	previewTheme(name string)
 	setTheme(name string) tea.Cmd
+	revertTheme()
 }
 
 // themeSaver persists theme choices off the update loop. Saves always write
@@ -31,15 +33,34 @@ type themeSaver struct {
 // themeSavedMsg reports the outcome of a background theme save.
 type themeSavedMsg struct{ err error }
 
-func (m *Model) currentTheme() string { return m.themeName }
+func (m *Model) currentTheme() string { return m.savedTheme }
 
 func (m *Model) themeSaveErr() error { return m.themeSave.err }
 
-// setTheme switches the color theme now and saves the choice in the
-// background.
-func (m *Model) setTheme(name string) tea.Cmd {
+// previewTheme applies name in place without persisting it. The Themes menu
+// calls it as the user moves through the list.
+func (m *Model) previewTheme(name string) {
+	if name == m.themeName {
+		return
+	}
 	m.themeName = name
 	m.applyTheme()
+}
+
+// revertTheme restores the saved theme after a preview was abandoned.
+func (m *Model) revertTheme() {
+	if m.themeName == m.savedTheme {
+		return
+	}
+	m.themeName = m.savedTheme
+	m.applyTheme()
+}
+
+// setTheme switches the color theme now, marks it current and saves the choice
+// in the background. The theme may already be applied from a preview.
+func (m *Model) setTheme(name string) tea.Cmd {
+	m.previewTheme(name)
+	m.savedTheme = m.themeName
 	s := &m.themeSave
 	if s.save == nil {
 		return nil
@@ -75,7 +96,8 @@ func newThemesMenu(styles *theme.Styles, themes themeSwitcher, version, updateAv
 				}
 				return "current"
 			},
-			Run: func() tea.Cmd { return themes.setTheme(name) },
+			Run:     func() tea.Cmd { return themes.setTheme(name) },
+			Preview: func() { themes.previewTheme(name) },
 		})
 	}
 	return menu.New(menu.Options{
@@ -88,5 +110,6 @@ func newThemesMenu(styles *theme.Styles, themes themeSwitcher, version, updateAv
 		Nested:          true,
 		Scope:           screen.ScopeOrigin,
 		Selected:        max(slices.Index(names, themes.currentTheme()), 0),
+		OnBack:          themes.revertTheme,
 	})
 }

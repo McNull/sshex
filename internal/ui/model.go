@@ -92,20 +92,21 @@ type screenDeps struct {
 // Model is the root Bubble Tea model. It owns the chrome, the theme and the
 // screen stack; screens are responsible only for their own content.
 type Model struct {
-	styles    *theme.Styles
-	themeName string
-	noColor   bool
-	dark      bool
-	themeSave themeSaver
-	global    keys.Global
-	header    header.Model
-	footer    footer.Model
-	help      help.Model
-	helpOpen  bool
-	stack     *screen.Stack
-	width     int
-	height    int
-	inSession bool
+	styles     *theme.Styles
+	themeName  string
+	savedTheme string // persisted theme; themeName may differ during a preview
+	noColor    bool
+	dark       bool
+	themeSave  themeSaver
+	global     keys.Global
+	header     header.Model
+	footer     footer.Model
+	help       help.Model
+	helpOpen   bool
+	stack      *screen.Stack
+	width      int
+	height     int
+	inSession  bool
 	// clientOrigin and clientTarget identify the current outer session. The
 	// local origin identifies the machine running the UI.
 	clientOrigin string
@@ -135,6 +136,7 @@ func New(opts ModelOptions) *Model {
 	m := &Model{
 		styles:       &styles,
 		themeName:    resolved.Name,
+		savedTheme:   resolved.Name,
 		noColor:      resolved.NoColor,
 		global:       keys.DefaultGlobal(),
 		header:       header.New(&styles, opts.Version, origin, client),

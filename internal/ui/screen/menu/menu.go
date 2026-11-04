@@ -20,7 +20,9 @@ const (
 
 // Item is one entry of a menu. Open is called when the item is selected and
 // returns the screen to push. Run, when set, is called instead and acts in
-// place. Describe, when set, replaces Description on every render.
+// place. Describe, when set, replaces Description on every render. Preview,
+// when set, is called whenever navigation highlights the item, letting a menu
+// show a live preview without committing.
 type Item struct {
 	Kind        string
 	Title       string
@@ -28,6 +30,7 @@ type Item struct {
 	Describe    func() string
 	Open        func() screen.Screen
 	Run         func() tea.Cmd
+	Preview     func()
 }
 
 func (i Item) description() string {
@@ -53,6 +56,8 @@ type Options struct {
 	Scope screen.Scope
 	// Selected is the initially highlighted item.
 	Selected int
+	// OnBack, when set, is called before a nested menu is left with back.
+	OnBack func()
 }
 
 // Model is a menu screen.
@@ -70,6 +75,7 @@ type Model struct {
 	selected        int
 	width           int
 	height          int
+	onBack          func()
 }
 
 // New returns a menu for the given options.
@@ -94,6 +100,7 @@ func New(opts Options) *Model {
 		version:         opts.Version,
 		updateAvailable: opts.UpdateAvailable,
 		selected:        min(max(opts.Selected, 0), max(len(opts.Items)-1, 0)),
+		onBack:          opts.OnBack,
 	}
 }
 
@@ -135,13 +142,18 @@ func (m *Model) Update(msg tea.Msg) (screen.Screen, tea.Cmd) {
 
 	switch {
 	case m.nested && keys.Matches(press, m.back):
+		if m.onBack != nil {
+			m.onBack()
+		}
 		return m, screen.Pop()
 	case !m.nested && keys.Matches(press, m.keys.Quit):
 		return m, screen.Quit()
 	case keys.Matches(press, m.keys.Up):
 		m.selected = (m.selected - 1 + len(m.items)) % len(m.items)
+		m.preview()
 	case keys.Matches(press, m.keys.Down):
 		m.selected = (m.selected + 1) % len(m.items)
+		m.preview()
 	case keys.Matches(press, m.keys.Select):
 		if len(m.items) == 0 {
 			return m, nil
@@ -156,6 +168,17 @@ func (m *Model) Update(msg tea.Msg) (screen.Screen, tea.Cmd) {
 		return m, screen.Push(item.Open())
 	}
 	return m, nil
+}
+
+// preview calls the highlighted item's Preview hook, if any. It runs after the
+// selection changes so a preview follows navigation.
+func (m *Model) preview() {
+	if len(m.items) == 0 {
+		return
+	}
+	if preview := m.items[m.selected].Preview; preview != nil {
+		preview()
+	}
 }
 
 // View implements screen.Screen.
