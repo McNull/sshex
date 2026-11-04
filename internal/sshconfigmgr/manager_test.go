@@ -46,6 +46,67 @@ func TestRepositoryFixture(t *testing.T) {
 	t.Fatalf("fixture alias missing from %+v", hosts)
 }
 
+func TestFedoraMatchFinalFixture(t *testing.T) {
+	hosts, err := NewSshConfigMgr("../../test-data/sshconfig-fedora/config").List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, host := range hosts {
+		if host.Alias == "fixture.example.test" {
+			if host.HostName != "fixture-host.example.test" || host.Port != 2222 {
+				t.Fatalf("fixture alias = %+v", host)
+			}
+			return
+		}
+	}
+	t.Fatalf("fixture alias missing from %+v", hosts)
+}
+
+func TestNormalizeMatchDirectives(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"final all", "Match final all\n", "Match all\n"},
+		{"final only", "Match final\n", "Match all\n"},
+		{"final host", "Match final host a.example\n", "Match host a.example\n"},
+		{"all", "Match all\n", "Match all\n"},
+		{"host", "Match host a.example\n", "Match host a.example\n"},
+		{"host negated", "Match host !*.example\n", "Match host !*.example\n"},
+		{"user", "Match user bob\n", "Match host !*\n"},
+		{"exec", "Match exec \"test -f /x\"\n", "Match host !*\n"},
+		{"combined", "Match host a.example user bob\n", "Match host !*\n"},
+		{"indented", "\tMatch final all\n", "\tMatch all\n"},
+		{"non match untouched", "Host a\n", "Host a\n"},
+		{"commented out", "# Match final all\n", "# Match final all\n"},
+	}
+	for _, tt := range tests {
+		if got := string(normalizeMatchDirectives([]byte(tt.in))); got != tt.want {
+			t.Errorf("%s: got %q want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestUnsupportedMatchCriterionDoesNotFail(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "config")
+	write(t, root, "Match user bob\n  Ciphers aes256-ctr\nHost tolerated\n  HostName tolerated.example\n")
+	hosts, err := NewSshConfigMgr(root).WithHome(dir).List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, host := range hosts {
+		if host.Alias == "tolerated" {
+			if host.HostName != "tolerated.example" {
+				t.Fatalf("tolerated alias = %+v", host)
+			}
+			return
+		}
+	}
+	t.Fatalf("tolerated alias missing from %+v", hosts)
+}
+
 func TestCustomConfigDoesNotFallBack(t *testing.T) {
 	if _, err := NewSshConfigMgr(filepath.Join(t.TempDir(), "missing")).List(); err == nil {
 		t.Fatal("expected custom config error")

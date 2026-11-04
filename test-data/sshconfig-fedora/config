@@ -1,0 +1,5 @@
+Include ssh_config.d/*.conf
+
+Host fixture.example.test
+  HostName fixture-host.example.test
+  Port 2222

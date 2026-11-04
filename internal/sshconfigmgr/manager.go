@@ -60,6 +60,7 @@ func (m *SshConfigMgr) List() ([]Host, error) {
 		if err != nil {
 			return nil, err
 		}
+		flat = normalizeMatchDirectives(flat)
 		cfg, err := ssh_config.Decode(strings.NewReader(string(flat)))
 		if err != nil {
 			return nil, fmt.Errorf("parse ssh config %q: %w", path, err)
@@ -112,12 +113,9 @@ func expandIncludes(data []byte, file, home string, seen map[string]bool, depth 
 	var out strings.Builder
 	for _, line := range strings.Split(string(data), "\n") {
 		trimmed := strings.TrimSpace(stripComment(line))
-		key, value, ok := strings.Cut(trimmed, " ")
-		if !ok {
-			key, value, ok = strings.Cut(trimmed, "\t")
-		}
+		key, value, ok := cutDirective(trimmed)
 		if ok && strings.EqualFold(key, "Include") {
-			patterns, splitErr := sshx.SplitArgs(strings.TrimSpace(value))
+			patterns, splitErr := sshx.SplitArgs(value)
 			if splitErr != nil {
 				return nil, fmt.Errorf("parse Include in %q: %w", file, splitErr)
 			}
