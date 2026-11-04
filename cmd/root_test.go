@@ -53,6 +53,16 @@ func TestRootVersionCheckFlag(t *testing.T) {
 	}
 }
 
+func TestRootVerboseFlag(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("verbose")
+	if flag == nil {
+		t.Fatal("root --verbose flag is not registered")
+	}
+	if flag.Shorthand != "" {
+		t.Fatalf("--verbose shorthand = %q, want none (reserved by --version)", flag.Shorthand)
+	}
+}
+
 type latestVersionFunc func(context.Context) (string, error)
 
 func (f latestVersionFunc) LatestVersion(ctx context.Context) (string, error) { return f(ctx) }

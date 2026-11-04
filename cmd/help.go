@@ -17,7 +17,9 @@ const rootHelp = `  Spawn ssh tunnels and execute commands from a remote shell.
   Options:
     -h, --help            Show this help message and exit
     -v, --version         Show version information and exit
+        --verbose         Show daemon and SSH diagnostics
         --version-check   Perform online version check and exit
+    -c, --config <file>   Select the sshex config file
         --theme <name>    Color theme for the interactive interface
                           (default: mono)
 
@@ -48,6 +50,7 @@ const connectHelp = `  Connect to a remote machine via ssh.
     -o, --option <option> Pass an ssh option (key=value), or raw ssh args when
                           the value starts with '-'
         --no-completions  Do not install shell completions on the remote
+        --verbose         Show daemon and SSH diagnostics
     -h, --help            Show this help message and exit
 `
 
@@ -65,6 +68,7 @@ const uninstallHelp = `  Remove the sshex installation from a machine.
     -J, --jump <hosts>    Jump host(s) to connect through (comma separated)
     -o, --option <option> Pass an ssh option (key=value), or raw ssh args when
                           the value starts with '-'
+        --verbose         Show daemon and SSH diagnostics
     -y, --yes             Do not prompt for confirmation
         --force           Uninstall even if other sshex sessions are active
         --config          Also remove the sshex config
@@ -223,6 +227,7 @@ const uiHelp = `  Open the interactive terminal interface.
 
   Options:
         --theme <name>    Color theme (default: mono)
+        --verbose         Show daemon and SSH diagnostics
     -h, --help            Show this help message and exit
 `
 

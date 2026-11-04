@@ -3,10 +3,10 @@ package connect
 import (
 	"testing"
 
-	"github.com/mcnull/sshex/internal/sshhosts"
+	"github.com/mcnull/sshex/internal/ui/hosts"
 )
 
-func hostNames(hosts []sshhosts.Host) []string {
+func hostNames(hosts []hosts.Candidate) []string {
 	names := make([]string, len(hosts))
 	for i, host := range hosts {
 		names[i] = host.Name
@@ -14,7 +14,7 @@ func hostNames(hosts []sshhosts.Host) []string {
 	return names
 }
 
-func assertHostNames(t *testing.T, got []sshhosts.Host, want ...string) {
+func assertHostNames(t *testing.T, got []hosts.Candidate, want ...string) {
 	t.Helper()
 	names := hostNames(got)
 	if len(names) != len(want) {
@@ -28,7 +28,7 @@ func assertHostNames(t *testing.T, got []sshhosts.Host, want ...string) {
 }
 
 func TestFilterHostsRanksMatches(t *testing.T) {
-	hosts := []sshhosts.Host{
+	hosts := []hosts.Candidate{
 		{Name: "mynullest.com"},
 		{Name: "gate.nullest.com"},
 		{Name: "nullest.com.evil"},
@@ -46,7 +46,7 @@ func TestFilterHostsRanksMatches(t *testing.T) {
 }
 
 func TestFilterHostsPrefixBeforeDomainMatch(t *testing.T) {
-	hosts := []sshhosts.Host{
+	hosts := []hosts.Candidate{
 		{Name: "gate.nullest.com"},
 		{Name: "nullest.com.au"},
 	}
@@ -56,7 +56,7 @@ func TestFilterHostsPrefixBeforeDomainMatch(t *testing.T) {
 }
 
 func TestFilterHostsIsCaseInsensitive(t *testing.T) {
-	hosts := []sshhosts.Host{
+	hosts := []hosts.Candidate{
 		{Name: "GATE.NULLEST.COM"},
 		{Name: "Nullest.COM"},
 	}
@@ -66,7 +66,7 @@ func TestFilterHostsIsCaseInsensitive(t *testing.T) {
 }
 
 func TestFilterHostsSortsTiesAlphabetically(t *testing.T) {
-	hosts := []sshhosts.Host{
+	hosts := []hosts.Candidate{
 		{Name: "zeta.nullest.com"},
 		{Name: "alpha.nullest.com"},
 		{Name: "beta.nullest.com"},
@@ -81,11 +81,23 @@ func TestFilterHostsSortsTiesAlphabetically(t *testing.T) {
 }
 
 func TestFilterHostsKeepsOrderWithoutQuery(t *testing.T) {
-	hosts := []sshhosts.Host{
+	hosts := []hosts.Candidate{
 		{Name: "zeta"},
 		{Name: "alpha"},
 	}
 
 	got := filterHosts(hosts, "  ")
 	assertHostNames(t, got, "zeta", "alpha")
+}
+
+func TestFilterHostsRanksSourcesAndHostnameMatch(t *testing.T) {
+	items := []hosts.Candidate{
+		{Name: "node-a.example.test", Port: 22, Source: "hosts"},
+		{Name: "mitm.example.test", HostName: "node-a.example.test", Port: 222, Source: "ssh_config"},
+		{Name: "node-a.example.test", Port: 22, Source: "known_hosts"},
+	}
+	got := filterHosts(items, "node-a.example.test")
+	if got[0].Source != "known_hosts" || got[1].Source != "ssh_config" || got[2].Source != "hosts" {
+		t.Fatalf("source order = %+v", got)
+	}
 }

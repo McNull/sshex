@@ -165,7 +165,7 @@ func New(opts ModelOptions) *Model {
 func resolveScreenDeps(opts ModelOptions, scope controlScope) screenDeps {
 	source := opts.HostSource
 	if source == nil {
-		source = sshHostSource{}
+		source = newSSHHostSource()
 	}
 	runner := opts.Runner
 	if runner == nil {

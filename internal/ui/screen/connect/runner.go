@@ -3,15 +3,17 @@ package connect
 import (
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/mcnull/sshex/internal/verbose"
 )
 
 // Runner starts a session for a target. It returns a command that suspends the
 // UI while the session runs and reports the result as FinishedMsg.
 type Runner interface {
-	Run(target string) tea.Cmd
+	Run(target string, port int) tea.Cmd
 }
 
 // ExecRunner starts a session by running this sshex binary as
@@ -24,8 +26,8 @@ func NewExecRunner() Runner { return ExecRunner{} }
 const noBannerEnv = "SSHEX_NO_BANNER=1"
 
 // Run implements Runner.
-func (ExecRunner) Run(target string) tea.Cmd {
-	cmd, err := connectCommand(target)
+func (ExecRunner) Run(target string, port int) tea.Cmd {
+	cmd, err := connectCommand(target, port)
 	if err != nil {
 		return func() tea.Msg { return FinishedMsg{Err: err} }
 	}
@@ -35,17 +37,26 @@ func (ExecRunner) Run(target string) tea.Cmd {
 	})
 }
 
-func connectCommand(target string) (*exec.Cmd, error) {
+func connectCommand(target string, port int) (*exec.Cmd, error) {
 	executable, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
 
-	cmd := exec.Command(executable, "connect", target)
+	args := make([]string, 0, 5)
+	if verbose.Enabled() {
+		args = append(args, "--verbose")
+	}
+	args = append(args, "connect")
+	if port > 0 && port != 22 {
+		args = append(args, "-p", strconv.Itoa(port))
+	}
+	args = append(args, target)
+	cmd := exec.Command(executable, args...)
 	// The UI already brands the session; a nested banner would clutter the
 	// terminal before the shell starts. The Server menu always starts a local
 	// origin connection, so the outer client session must not leak into it.
-	cmd.Env = append(withoutSession(os.Environ()), noBannerEnv)
+	cmd.Env = append(withoutSession(verbose.Environment()), noBannerEnv)
 	return cmd, nil
 }
 

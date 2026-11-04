@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mcnull/sshex/internal/sshhosts"
+	"github.com/mcnull/sshex/internal/ui/hosts"
 )
 
 // Match ranks, best first. Ties keep the alphabetical host order.
@@ -16,21 +16,30 @@ const (
 )
 
 type hostMatch struct {
-	host sshhosts.Host
+	host hosts.Candidate
 	rank int
 }
 
 // filterHosts returns the hosts matching query in best-match order. Matching is
 // case-insensitive and applies to the host name only.
-func filterHosts(hosts []sshhosts.Host, query string) []sshhosts.Host {
+func filterHosts(items []hosts.Candidate, query string) []hosts.Candidate {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {
-		return append([]sshhosts.Host(nil), hosts...)
+		return append([]hosts.Candidate(nil), items...)
 	}
 
-	matches := make([]hostMatch, 0, len(hosts))
-	for _, host := range hosts {
+	matches := make([]hostMatch, 0, len(items))
+	for _, host := range items {
 		rank, ok := matchRank(host.Name, query)
+		if host.HasSource("known_hosts") && ok && rank == rankExact {
+			rank = -1
+		}
+		if host.HasSource("hosts") && ok && !host.HasSource("known_hosts") && !host.HasSource("ssh_config") {
+			rank += 3
+		}
+		if hostRank, hostOK := matchRank(host.HostName, query); hostOK && (!ok || hostRank+1 < rank) {
+			rank, ok = hostRank+1, true
+		}
 		if !ok {
 			continue
 		}
@@ -49,7 +58,7 @@ func filterHosts(hosts []sshhosts.Host, query string) []sshhosts.Host {
 		return matches[i].host.Name < matches[j].host.Name
 	})
 
-	filtered := make([]sshhosts.Host, len(matches))
+	filtered := make([]hosts.Candidate, len(matches))
 	for i, match := range matches {
 		filtered[i] = match.host
 	}

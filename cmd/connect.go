@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -12,8 +13,9 @@ import (
 	"github.com/mcnull/sshex/internal/client"
 	"github.com/mcnull/sshex/internal/config"
 	"github.com/mcnull/sshex/internal/daemon"
-	"github.com/mcnull/sshex/internal/sshhosts"
 	"github.com/mcnull/sshex/internal/sshx"
+	"github.com/mcnull/sshex/internal/ui"
+	"github.com/mcnull/sshex/internal/verbose"
 	"github.com/spf13/cobra"
 )
 
@@ -35,7 +37,14 @@ var connectCmd = &cobra.Command{
 		sp := startSpinner(out, "installing remote sshex command...")
 		defer func() { sp.Stop() }()
 
-		broker, err := daemon.Ensure(cmd.Context(), os.Getenv("SSHEX_CONFIG"))
+		var broker daemon.RuntimeInfo
+		var err error
+		if verbose.ShouldLog() {
+			fmt.Fprintln(cmd.ErrOrStderr(), "sshex: verbose: ensuring local daemon")
+			broker, err = daemon.EnsureVerbose(cmd.Context(), os.Getenv("SSHEX_CONFIG"), cmd.ErrOrStderr())
+		} else {
+			broker, err = daemon.Ensure(cmd.Context(), os.Getenv("SSHEX_CONFIG"))
+		}
 		if err != nil {
 			return err
 		}
@@ -64,6 +73,7 @@ var connectCmd = &cobra.Command{
 		// Pause the spinner: OpenSSH may prompt on the terminal for host-key
 		// confirmation and authentication, and the animation would garble it.
 		sp.Stop()
+		verbosef(cmd.ErrOrStderr(), "establishing SSH master for %s", target.String())
 
 		master, err := application.Transport.Connect(cmd.Context(), target, sshx.ConnectOptions{
 			ControlPath: controlPath,
@@ -80,6 +90,7 @@ var connectCmd = &cobra.Command{
 		}()
 
 		sp = startSpinner(out, "installing remote sshex command...")
+		verbosef(cmd.ErrOrStderr(), "requesting remote install/session setup")
 
 		result, err := c.CreateSession(cmd.Context(), api.CreateSessionRequest{
 			User:                  user,
@@ -132,6 +143,12 @@ var connectCmd = &cobra.Command{
 	},
 }
 
+func verbosef(w io.Writer, format string, args ...any) {
+	if verbose.ShouldLog() {
+		fmt.Fprintf(w, "sshex: verbose: "+format+"\n", args...)
+	}
+}
+
 func splitTarget(target string) (string, string) {
 	if idx := strings.LastIndex(target, "@"); idx >= 0 {
 		return target[:idx], target[idx+1:]
@@ -163,8 +180,8 @@ func heartbeatLoop(ctx context.Context, c *client.Client, sessionID, connectionI
 	}
 }
 
-var resolveConnectHosts = func() ([]sshhosts.Host, error) {
-	return sshhosts.Resolve(sshhosts.Options{})
+var resolveConnectHosts = func() ([]ui.HostCompletion, error) {
+	return ui.ConnectHostCompletions()
 }
 
 func completeConnectTarget(_ *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {

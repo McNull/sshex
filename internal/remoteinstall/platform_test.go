@@ -42,13 +42,23 @@ func TestParsePlatform(t *testing.T) {
 }
 
 func TestDetectPlatform(t *testing.T) {
-	conn := &fakeConn{stdout: map[string]string{platformScript: "Linux\nx86_64\n"}}
+	conn := &fakeConn{stdout: map[string]string{platformScript: "startup warning\n" + platformBeginMarker + "\nLinux\nx86_64\n" + platformEndMarker + "\n"}}
 	got, err := DetectPlatform(context.Background(), conn)
 	if err != nil {
 		t.Fatalf("DetectPlatform() error: %v", err)
 	}
 	if got != (Platform{OS: "linux", Arch: "amd64"}) {
 		t.Fatalf("DetectPlatform() = %+v", got)
+	}
+}
+
+func TestParsePlatformIgnoresUnframedStartupOutputWhenMarkersPresent(t *testing.T) {
+	got, err := ParsePlatform("login banner\n" + platformBeginMarker + "\nLinux\naarch64\n" + platformEndMarker + "\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != (Platform{OS: "linux", Arch: "arm64"}) {
+		t.Fatalf("platform = %+v", got)
 	}
 }
 

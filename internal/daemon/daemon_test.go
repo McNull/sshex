@@ -1,11 +1,14 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/mcnull/sshex/internal/config"
@@ -87,7 +90,7 @@ func TestEnsureReusesRunningService(t *testing.T) {
 	}
 	defer ln.Close()
 
-	info := RuntimeInfo{PID: os.Getpid(), Endpoint: model.Endpoint{Kind: model.EndpointUnix, Address: sock}, Token: "tok"}
+	info := RuntimeInfo{PID: os.Getpid(), Endpoint: model.Endpoint{Kind: model.EndpointUnix, Address: sock}, Token: "tok", Protocol: ProtocolVersion}
 	if err := WriteRuntime(info); err != nil {
 		t.Fatalf("WriteRuntime() error: %v", err)
 	}
@@ -110,11 +113,115 @@ func TestEnsureReusesRunningService(t *testing.T) {
 	}
 }
 
+func TestEnsureVerboseReportsRunningDaemonVersion(t *testing.T) {
+	base := shortTempDir(t)
+	t.Setenv("XDG_RUNTIME_DIR", base)
+	sock := filepath.Join(base, "daemon.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	if err := WriteRuntime(RuntimeInfo{
+		PID: os.Getpid(), Endpoint: model.Endpoint{Kind: model.EndpointUnix, Address: sock},
+		Protocol: ProtocolVersion, Version: "9.8.7",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	defer RemoveRuntime()
+	var log bytes.Buffer
+	if _, err := EnsureVerbose(context.Background(), "", &log); err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"found running daemon", "version=9.8.7", "reusing compatible daemon"} {
+		if !strings.Contains(log.String(), text) {
+			t.Fatalf("log %q does not contain %q", log.String(), text)
+		}
+	}
+}
+
+func TestEnsureVerboseReportsIncompatibleDaemonAndRestart(t *testing.T) {
+	base := shortTempDir(t)
+	t.Setenv("XDG_RUNTIME_DIR", base)
+	sock := filepath.Join(base, "daemon.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldSignal, oldSpawn := signalProcess, spawn
+	t.Cleanup(func() { signalProcess, spawn = oldSignal, oldSpawn })
+	signalProcess = func(_ int, _ syscall.Signal) error { return ln.Close() }
+	if err := WriteRuntime(RuntimeInfo{
+		PID: os.Getpid() + 1, Endpoint: model.Endpoint{Kind: model.EndpointUnix, Address: sock}, Version: "old-version", Protocol: ProtocolVersion - 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	defer RemoveRuntime()
+	spawn = func(_ context.Context, _ string) error {
+		fresh, err := net.Listen("unix", sock)
+		if err != nil {
+			return err
+		}
+		t.Cleanup(func() { _ = fresh.Close() })
+		return WriteRuntime(RuntimeInfo{PID: os.Getpid(), Endpoint: model.Endpoint{Kind: model.EndpointUnix, Address: sock}, Version: "new-version", Protocol: ProtocolVersion})
+	}
+	var log bytes.Buffer
+	if _, err := EnsureVerbose(context.Background(), "", &log); err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"version=old-version", "protocol is incompatible", "starting daemon", "version=new-version"} {
+		if !strings.Contains(log.String(), text) {
+			t.Fatalf("log %q does not contain %q", log.String(), text)
+		}
+	}
+}
+
+func TestEnsureRestartsIncompatibleBroker(t *testing.T) {
+	base := shortTempDir(t)
+	t.Setenv("XDG_RUNTIME_DIR", base)
+	sock := filepath.Join(base, "daemon.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	oldSignal, oldSpawn := signalProcess, spawn
+	t.Cleanup(func() { signalProcess, spawn = oldSignal, oldSpawn })
+	signalProcess = func(_ int, _ syscall.Signal) error { return ln.Close() }
+	if err := WriteRuntime(RuntimeInfo{
+		PID:      os.Getpid() + 1,
+		Endpoint: model.Endpoint{Kind: model.EndpointUnix, Address: sock},
+		Token:    "stale",
+		Protocol: 0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	defer RemoveRuntime()
+
+	spawn = func(_ context.Context, _ string) error {
+		fresh, err := net.Listen("unix", sock)
+		if err != nil {
+			return err
+		}
+		// Keep the replacement endpoint alive until the test finishes.
+		t.Cleanup(func() { _ = fresh.Close() })
+		return WriteRuntime(RuntimeInfo{PID: os.Getpid(), Endpoint: model.Endpoint{Kind: model.EndpointUnix, Address: sock}, Token: "fresh", Protocol: ProtocolVersion})
+	}
+
+	got, err := Ensure(context.Background(), "")
+	if err != nil {
+		t.Fatalf("Ensure() error: %v", err)
+	}
+	if got.Token != "fresh" || got.Protocol != ProtocolVersion {
+		t.Fatalf("Ensure() = %+v, want fresh compatible broker", got)
+	}
+}
+
 func TestEnsureSpawnsWhenStale(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("XDG_RUNTIME_DIR", base)
 
-	if err := WriteRuntime(RuntimeInfo{PID: 1, Endpoint: model.Endpoint{Kind: model.EndpointUnix, Address: filepath.Join(base, "missing.sock")}}); err != nil {
+	if err := WriteRuntime(RuntimeInfo{PID: 1, Endpoint: model.Endpoint{Kind: model.EndpointUnix, Address: filepath.Join(base, "missing.sock")}, Protocol: ProtocolVersion}); err != nil {
 		t.Fatalf("WriteRuntime() error: %v", err)
 	}
 	defer RemoveRuntime()
@@ -128,7 +235,7 @@ func TestEnsureSpawnsWhenStale(t *testing.T) {
 
 	old := spawn
 	spawn = func(context.Context, string) error {
-		return WriteRuntime(RuntimeInfo{PID: os.Getpid(), Endpoint: model.Endpoint{Kind: model.EndpointUnix, Address: sock}, Token: "fresh"})
+		return WriteRuntime(RuntimeInfo{PID: os.Getpid(), Endpoint: model.Endpoint{Kind: model.EndpointUnix, Address: sock}, Token: "fresh", Protocol: ProtocolVersion})
 	}
 	defer func() { spawn = old }()
 

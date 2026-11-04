@@ -5,11 +5,16 @@ import (
 	"strings"
 )
 
+const (
+	pathsBeginMarker = "SSHEX_REMOTE_PATHS_BEGIN_7F3A9C"
+	pathsEndMarker   = "SSHEX_REMOTE_PATHS_END_7F3A9C"
+)
+
 // pathsScript resolves the persistent state root and runtime root on the remote
 // host. It mirrors config.RuntimeDir and sessionfile.RemoteDir on the client.
 const pathsScript = `data="${SSHEX_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/sshex}"; ` +
 	`if [ -n "$XDG_RUNTIME_DIR" ]; then runtime="$XDG_RUNTIME_DIR/sshex"; else runtime="/tmp/sshex-$(id -u)"; fi; ` +
-	`printf '%s\n%s\n' "$data" "$runtime"`
+	`printf '\n%s\n%s\n%s\n%s\n' '` + pathsBeginMarker + `' "$data" "$runtime" '` + pathsEndMarker + `'`
 
 // RemotePaths holds the resolved remote filesystem locations for a session.
 type RemotePaths struct {

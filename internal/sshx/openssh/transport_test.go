@@ -60,6 +60,14 @@ func TestTargetArgs(t *testing.T) {
 	}
 }
 
+func TestFormatSSHCommandQuotesArguments(t *testing.T) {
+	got := formatSSHCommand("ssh", []string{"-p", "222", "alice@node a.example.test"})
+	want := `"ssh" "-p" "222" "alice@node a.example.test"`
+	if got != want {
+		t.Fatalf("formatSSHCommand() = %s, want %s", got, want)
+	}
+}
+
 func TestTargetArgsRejectsUnterminatedQuote(t *testing.T) {
 	if _, err := targetArgs(sshx.Target{Host: "ssh02", Options: []string{"-J 'nulls-probe"}}); err == nil {
 		t.Fatal("targetArgs() error = nil, want invalid -o value")

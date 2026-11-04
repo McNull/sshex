@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -22,15 +23,19 @@ const (
 	RuntimeFileMode = 0o600
 	LockFileName    = "sshexd.lock"
 	LogFileName     = "sshexd.log"
+	ProtocolVersion = 2
 
 	startTimeout  = 5 * time.Second
 	startInterval = 50 * time.Millisecond
 	dialTimeout   = 300 * time.Millisecond
+	stopTimeout   = 3 * time.Second
 )
 
 // spawn starts the background service process. It is a package variable so
 // tests can substitute a hermetic implementation.
 var spawn = spawnDetached
+
+var signalProcess = syscall.Kill
 
 func spawnDetached(_ context.Context, configPath string) error {
 	exe, err := os.Executable()
@@ -63,8 +68,23 @@ func spawnDetached(_ context.Context, configPath string) error {
 
 // Ensure returns the running background service, starting one if necessary.
 func Ensure(ctx context.Context, configPath string) (RuntimeInfo, error) {
-	if info, err := ReadRuntime(); err == nil && EndpointAlive(info.Endpoint) {
-		return info, nil
+	return EnsureVerbose(ctx, configPath, nil)
+}
+
+// EnsureVerbose behaves like Ensure and reports daemon reuse/restart decisions
+// to log when it is non-nil.
+func EnsureVerbose(ctx context.Context, configPath string, log io.Writer) (RuntimeInfo, error) {
+	if info, err := ReadRuntime(); err == nil {
+		if EndpointAlive(info.Endpoint) {
+			logDaemon(log, "found running daemon: pid=%d version=%s protocol=%d", info.PID, displayVersion(info.Version), info.Protocol)
+			if info.Protocol == ProtocolVersion {
+				logDaemon(log, "reusing compatible daemon")
+				return info, nil
+			}
+			logDaemon(log, "daemon protocol is incompatible; checking for safe restart")
+		} else {
+			logDaemon(log, "found stale daemon runtime: pid=%d version=%s protocol=%d endpoint is unavailable", info.PID, displayVersion(info.Version), info.Protocol)
+		}
 	}
 
 	unlock, err := lock()
@@ -73,11 +93,22 @@ func Ensure(ctx context.Context, configPath string) (RuntimeInfo, error) {
 	}
 	defer unlock()
 
-	if info, err := ReadRuntime(); err == nil && EndpointAlive(info.Endpoint) {
-		return info, nil
+	if info, err := ReadRuntime(); err == nil {
+		if EndpointAlive(info.Endpoint) {
+			logDaemon(log, "found running daemon after lock: pid=%d version=%s protocol=%d", info.PID, displayVersion(info.Version), info.Protocol)
+			if info.Protocol == ProtocolVersion {
+				logDaemon(log, "reusing compatible daemon")
+				return info, nil
+			}
+			logDaemon(log, "daemon protocol is incompatible; restarting")
+			if err := stopIncompatible(ctx, info); err != nil {
+				return RuntimeInfo{}, err
+			}
+		}
 	}
 	_ = RemoveRuntime()
 
+	logDaemon(log, "starting daemon (protocol %d)", ProtocolVersion)
 	if err := spawn(ctx, configPath); err != nil {
 		return RuntimeInfo{}, fmt.Errorf("start sshex service: %w", err)
 	}
@@ -85,13 +116,48 @@ func Ensure(ctx context.Context, configPath string) (RuntimeInfo, error) {
 	deadline := time.Now().Add(startTimeout)
 	for time.Now().Before(deadline) {
 		if info, err := ReadRuntime(); err == nil && EndpointAlive(info.Endpoint) {
-			return info, nil
+			if info.Protocol == ProtocolVersion {
+				logDaemon(log, "daemon ready: pid=%d version=%s protocol=%d", info.PID, displayVersion(info.Version), info.Protocol)
+				return info, nil
+			}
 		}
 		if err := wait(ctx, startInterval); err != nil {
 			return RuntimeInfo{}, err
 		}
 	}
 	return RuntimeInfo{}, fmt.Errorf("sshex service did not become ready")
+}
+
+func logDaemon(log io.Writer, format string, args ...any) {
+	if log != nil {
+		_, _ = fmt.Fprintf(log, "sshex: verbose: "+format+"\n", args...)
+	}
+}
+
+func displayVersion(version string) string {
+	if version == "" {
+		return "unknown"
+	}
+	return version
+}
+
+func stopIncompatible(ctx context.Context, info RuntimeInfo) error {
+	if info.PID <= 0 || info.PID == os.Getpid() {
+		return fmt.Errorf("running sshex service uses incompatible protocol %d and cannot be safely restarted", info.Protocol)
+	}
+	if err := signalProcess(info.PID, syscall.SIGTERM); err != nil && err != syscall.ESRCH {
+		return fmt.Errorf("stop incompatible sshex service (protocol %d): %w", info.Protocol, err)
+	}
+	deadline := time.Now().Add(stopTimeout)
+	for time.Now().Before(deadline) {
+		if !EndpointAlive(info.Endpoint) {
+			return RemoveRuntime()
+		}
+		if err := wait(ctx, startInterval); err != nil {
+			return err
+		}
+	}
+	return fmt.Errorf("incompatible sshex service (protocol %d) did not stop", info.Protocol)
 }
 
 // Stop terminates a running background service and clears its runtime file.
@@ -158,6 +224,8 @@ type RuntimeInfo struct {
 	PID      int            `json:"pid"`
 	Endpoint model.Endpoint `json:"endpoint"`
 	Token    string         `json:"token,omitempty"`
+	Protocol int            `json:"protocol,omitempty"`
+	Version  string         `json:"version,omitempty"`
 }
 
 type Daemon struct {

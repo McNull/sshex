@@ -38,19 +38,19 @@ func TestPathsScriptMatchesSessionfileRemoteDir(t *testing.T) {
 				t.Fatalf("pathsScript error: %v", err)
 			}
 			lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-			if len(lines) != 2 {
-				t.Fatalf("pathsScript output = %q, want two lines", out)
+			if len(lines) != 4 || lines[0] != pathsBeginMarker || lines[3] != pathsEndMarker {
+				t.Fatalf("pathsScript output = %q, want framed paths", out)
 			}
 
 			sessionsDir, err := sessionfile.RemoteDir()
 			if err != nil {
 				t.Fatalf("RemoteDir() error: %v", err)
 			}
-			if want := filepath.Dir(sessionsDir); lines[0] != want {
-				t.Fatalf("data dir = %q, want %q (dir of RemoteDir)", lines[0], want)
+			if want := filepath.Dir(sessionsDir); lines[1] != want {
+				t.Fatalf("data dir = %q, want %q (dir of RemoteDir)", lines[1], want)
 			}
-			if want := "/run/user/501/sshex"; lines[1] != want {
-				t.Fatalf("runtime dir = %q, want %q", lines[1], want)
+			if want := "/run/user/501/sshex"; lines[2] != want {
+				t.Fatalf("runtime dir = %q, want %q", lines[2], want)
 			}
 		})
 	}

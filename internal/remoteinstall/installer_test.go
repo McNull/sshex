@@ -65,7 +65,7 @@ func (f *fakeConn) Shell(context.Context, io.Reader, io.Writer, io.Writer) error
 func (f *fakeConn) Close(context.Context) error                                  { return nil }
 
 func TestRemotePaths(t *testing.T) {
-	conn := &fakeConn{stdout: map[string]string{pathsScript: "/home/tester/.local/share/sshex\n/run/user/1000/sshex\n"}}
+	conn := &fakeConn{stdout: map[string]string{pathsScript: "shell startup notice\n" + pathsBeginMarker + "\n/home/tester/.local/share/sshex\n/run/user/1000/sshex\n" + pathsEndMarker + "\nmore startup output\n"}}
 	paths, err := newTestInstaller(t).RemotePaths(context.Background(), conn)
 	if err != nil {
 		t.Fatalf("RemotePaths() error: %v", err)
@@ -75,6 +75,14 @@ func TestRemotePaths(t *testing.T) {
 	}
 	if paths.RunDir != "/run/user/1000/sshex" {
 		t.Fatalf("RemotePaths().RunDir = %q, want /run/user/1000/sshex", paths.RunDir)
+	}
+}
+
+func TestRemotePathsReportsUnexpectedOutput(t *testing.T) {
+	conn := &fakeConn{stdout: map[string]string{pathsScript: "warning: unexpected\n"}}
+	_, err := newTestInstaller(t).RemotePaths(context.Background(), conn)
+	if err == nil || !strings.Contains(err.Error(), `"warning: unexpected\n"`) {
+		t.Fatalf("RemotePaths() error = %v, want diagnostic output", err)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mcnull/sshex/internal/ui/theme"
+	"github.com/mcnull/sshex/internal/verbose"
 )
 
 // ErrNotTerminal is returned when the UI is started without an interactive
@@ -44,6 +45,11 @@ type Options struct {
 
 // Run starts the UI and blocks until it exits.
 func Run(opts Options) error {
+	// Restore the parent process's terminal logger state after child commands;
+	// UI diagnostics are intentionally suppressed while Bubble Tea owns it.
+	wasSuppressed := !verbose.ShouldLog()
+	verbose.Suppress(true)
+	defer verbose.Suppress(wasSuppressed)
 	in := opts.In
 	if in == nil {
 		in = os.Stdin

@@ -10,37 +10,39 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mcnull/sshex/internal/sshhosts"
+	"github.com/mcnull/sshex/internal/ui/hosts"
 	"github.com/mcnull/sshex/internal/ui/screen"
 	"github.com/mcnull/sshex/internal/ui/theme"
 )
 
 type fakeSource struct {
-	hosts []sshhosts.Host
+	hosts []hosts.Candidate
 	err   error
 }
 
-func (s fakeSource) Resolve() ([]sshhosts.Host, error) {
+func (s fakeSource) List() ([]hosts.Candidate, error) {
 	return s.hosts, s.err
 }
 
 type countingSource struct {
-	hosts []sshhosts.Host
+	hosts []hosts.Candidate
 	calls int
 }
 
-func (s *countingSource) Resolve() ([]sshhosts.Host, error) {
+func (s *countingSource) List() ([]hosts.Candidate, error) {
 	s.calls++
 	return s.hosts, nil
 }
 
 type fakeRunner struct {
 	targets []string
+	ports   []int
 	err     error
 }
 
-func (r *fakeRunner) Run(target string) tea.Cmd {
+func (r *fakeRunner) Run(target string, port int) tea.Cmd {
 	r.targets = append(r.targets, target)
+	r.ports = append(r.ports, port)
 	err := r.err
 	return func() tea.Msg { return FinishedMsg{Err: err} }
 }
@@ -52,8 +54,8 @@ func newScreen(source HostSource, runner Runner) *Model {
 	return m
 }
 
-func testHosts() []sshhosts.Host {
-	return []sshhosts.Host{
+func testHosts() []hosts.Candidate {
+	return []hosts.Candidate{
 		{Name: "db", Description: "db.example.com", Port: 2222},
 		{Name: "host1"},
 		{Name: "web", Description: "web.example.com"},
@@ -159,7 +161,7 @@ func TestSearchInputRefreshesStylesWhenThemeChanges(t *testing.T) {
 }
 
 func TestTypingExactMatchSelectsItFirst(t *testing.T) {
-	m := newScreen(fakeSource{hosts: []sshhosts.Host{
+	m := newScreen(fakeSource{hosts: []hosts.Candidate{
 		{Name: "alpha.nullest.com"},
 		{Name: "nullest.com"},
 		{Name: "zeta.nullest.com"},
@@ -267,6 +269,35 @@ func TestTabTogglesFocusAndListConnect(t *testing.T) {
 	}
 }
 
+func TestSelectingNonstandardPortUpdatesInputAndRunner(t *testing.T) {
+	runner := &fakeRunner{}
+	m := newScreen(fakeSource{hosts: []hosts.Candidate{{Name: "mitm.example.test", Port: 222}}}, runner)
+	load(t, m)
+	m.Update(press(tea.KeyTab, ""))
+	m.Update(press(tea.KeyEnter, ""))
+	if got := m.input.Value(); got != "mitm.example.test:222" {
+		t.Fatalf("input = %q", got)
+	}
+	if len(runner.targets) != 1 || runner.targets[0] != "mitm.example.test" || runner.ports[0] != 222 {
+		t.Fatalf("runner target/port = %v/%v", runner.targets, runner.ports)
+	}
+}
+
+func TestSelectingConfigHostByHostNameConnectsUsingAlias(t *testing.T) {
+	runner := &fakeRunner{}
+	m := newScreen(fakeSource{hosts: []hosts.Candidate{
+		{Name: "node-a.example.test", Port: 22, Source: "known_hosts"},
+		{Name: "mitm.example.test", HostName: "node-a.example.test", Description: "node-a.example.test", Port: 222, Source: "ssh_config"},
+	}}, runner)
+	load(t, m)
+	typeText(m, "node-a.example.test")
+	m.Update(press(tea.KeyDown, ""))
+	m.Update(press(tea.KeyEnter, ""))
+	if len(runner.targets) != 1 || runner.targets[0] != "mitm.example.test" || runner.ports[0] != 222 {
+		t.Fatalf("runner target/port = %v/%v", runner.targets, runner.ports)
+	}
+}
+
 func TestEscPopsScreen(t *testing.T) {
 	m := newScreen(fakeSource{}, &fakeRunner{})
 
@@ -278,11 +309,11 @@ func TestEscPopsScreen(t *testing.T) {
 }
 
 func TestListScrollsWithSelection(t *testing.T) {
-	hosts := make([]sshhosts.Host, 30)
-	for i := range hosts {
-		hosts[i] = sshhosts.Host{Name: fmt.Sprintf("h%02d", i)}
+	items := make([]hosts.Candidate, 30)
+	for i := range items {
+		items[i] = hosts.Candidate{Name: fmt.Sprintf("h%02d", i)}
 	}
-	m := newScreen(fakeSource{hosts: hosts}, &fakeRunner{})
+	m := newScreen(fakeSource{hosts: items}, &fakeRunner{})
 	load(t, m)
 	m.Update(press(tea.KeyTab, ""))
 
@@ -333,13 +364,13 @@ func TestListHeaderIsStickyAndAligned(t *testing.T) {
 func TestDisplayDescriptionHidesRepeatedName(t *testing.T) {
 	cases := []struct {
 		name string
-		host sshhosts.Host
+		host hosts.Candidate
 		want string
 	}{
-		{"same", sshhosts.Host{Name: "web", Description: "web"}, ""},
-		{"same ignoring case", sshhosts.Host{Name: "web", Description: "WEB"}, ""},
-		{"different", sshhosts.Host{Name: "web", Description: "web.example.com"}, "web.example.com"},
-		{"empty", sshhosts.Host{Name: "web"}, ""},
+		{"same", hosts.Candidate{Name: "web", Description: "web"}, ""},
+		{"same ignoring case", hosts.Candidate{Name: "web", Description: "WEB"}, ""},
+		{"different", hosts.Candidate{Name: "web", Description: "web.example.com"}, "web.example.com"},
+		{"empty", hosts.Candidate{Name: "web"}, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

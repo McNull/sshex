@@ -12,7 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/mcnull/sshex/internal/sshhosts"
+	"github.com/mcnull/sshex/internal/ui/hosts"
 	"github.com/mcnull/sshex/internal/ui/keys"
 	"github.com/mcnull/sshex/internal/ui/screen"
 	"github.com/mcnull/sshex/internal/ui/theme"
@@ -31,7 +31,7 @@ const (
 
 // HostSource resolves the hosts shown by the screen.
 type HostSource interface {
-	Resolve() ([]sshhosts.Host, error)
+	List() ([]hosts.Candidate, error)
 }
 
 // Options configures the Connect screen.
@@ -50,8 +50,8 @@ type Model struct {
 	input  textinput.Model
 
 	focus    int
-	hosts    []sshhosts.Host
-	filtered []sshhosts.Host
+	hosts    []hosts.Candidate
+	filtered []hosts.Candidate
 	selected int
 	offset   int
 
@@ -67,7 +67,7 @@ type Model struct {
 
 // hostsLoadedMsg carries the result of the asynchronous host lookup.
 type hostsLoadedMsg struct {
-	hosts []sshhosts.Host
+	hosts []hosts.Candidate
 	err   error
 }
 
@@ -173,12 +173,16 @@ func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 		case keys.Matches(press, m.keys.Select):
 			target := strings.TrimSpace(m.input.Value())
 			if target == "" {
-				target = m.selectedName()
+				if host, ok := m.selectedHost(); ok {
+					return m, m.connectSelected(host)
+				}
+			} else if host, ok := m.selectedHost(); ok && (strings.EqualFold(target, host.Name) || strings.EqualFold(target, host.HostName)) {
+				return m, m.connectSelected(host)
 			}
 			if target == "" {
 				return m, nil
 			}
-			return m, m.connect(target)
+			return m, m.connect(target, 22)
 		}
 
 		before := m.input.Value()
@@ -200,8 +204,8 @@ func (m *Model) handleKey(press tea.KeyPressMsg) (screen.Screen, tea.Cmd) {
 	case keys.Matches(press, m.keys.Down):
 		m.move(1)
 	case keys.Matches(press, m.keys.Select):
-		if target := m.selectedName(); target != "" {
-			return m, m.connect(target)
+		if host, ok := m.selectedHost(); ok {
+			return m, m.connectSelected(host)
 		}
 	}
 	return m, nil
@@ -241,7 +245,7 @@ func (m *Model) backspaceSearch() tea.Cmd {
 	return tea.Batch(focusCmd, inputCmd)
 }
 
-func (m *Model) connect(target string) tea.Cmd {
+func (m *Model) connect(target string, port int) tea.Cmd {
 	m.status = ""
 	m.statusErr = false
 	if m.runner == nil {
@@ -249,7 +253,19 @@ func (m *Model) connect(target string) tea.Cmd {
 		m.statusErr = true
 		return nil
 	}
-	return m.runner.Run(target)
+	return m.runner.Run(target, port)
+}
+
+func (m *Model) connectSelected(host hosts.Candidate) tea.Cmd {
+	port := host.Port
+	if port == 0 {
+		port = 22
+	}
+	if port != 22 {
+		m.input.SetValue(host.Name + ":" + strconv.Itoa(port))
+		m.input.CursorEnd()
+	}
+	return m.connect(host.Name, port)
 }
 
 func (m *Model) loadHosts() tea.Cmd {
@@ -260,7 +276,7 @@ func (m *Model) loadHosts() tea.Cmd {
 		}
 	}
 	return func() tea.Msg {
-		hosts, err := source.Resolve()
+		hosts, err := source.List()
 		return hostsLoadedMsg{hosts: hosts, err: err}
 	}
 }
@@ -286,6 +302,13 @@ func (m *Model) selectedName() string {
 		return ""
 	}
 	return m.filtered[m.selected].Name
+}
+
+func (m *Model) selectedHost() (hosts.Candidate, bool) {
+	if m.selected < 0 || m.selected >= len(m.filtered) {
+		return hosts.Candidate{}, false
+	}
+	return m.filtered[m.selected], true
 }
 
 func (m *Model) listRows() int {
@@ -396,7 +419,7 @@ func (m *Model) nameWidth() int {
 	return min(max(longest+2, 8), max(m.width/2, 8))
 }
 
-func (m *Model) hostRow(host sshhosts.Host, selected bool, nameWidth int) string {
+func (m *Model) hostRow(host hosts.Candidate, selected bool, nameWidth int) string {
 	marker := " "
 	if selected {
 		marker = "›"
@@ -422,7 +445,7 @@ func (m *Model) descriptionWidth(nameWidth int) int {
 	return max(m.width-nameWidth-portColumnWidth-8, 0)
 }
 
-func displayPort(host sshhosts.Host) string {
+func displayPort(host hosts.Candidate) string {
 	if host.Port == 0 {
 		return "22"
 	}
@@ -430,7 +453,7 @@ func displayPort(host sshhosts.Host) string {
 }
 
 // displayDescription hides the HostName column when it repeats the host name.
-func displayDescription(host sshhosts.Host) string {
+func displayDescription(host hosts.Candidate) string {
 	description := strings.TrimSpace(host.Description)
 	if strings.EqualFold(description, host.Name) {
 		return ""

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/mcnull/sshex/internal/api"
+	"github.com/mcnull/sshex/internal/assets"
 	"github.com/mcnull/sshex/internal/config"
 	"github.com/mcnull/sshex/internal/control"
 	"github.com/mcnull/sshex/internal/control/unix"
@@ -155,6 +156,8 @@ func (a *App) Serve(ctx context.Context) error {
 		PID:      os.Getpid(),
 		Endpoint: listener.Endpoint(),
 		Token:    token,
+		Protocol: daemon.ProtocolVersion,
+		Version:  assets.Version(),
 	}); err != nil {
 		_ = listener.Close()
 		return err

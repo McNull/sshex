@@ -1,0 +1,2 @@
+node-a.example.test ssh-ed25519 AAAATESTKEY
+[mitm.example.test]:222 ssh-ed25519 AAAATESTKEY

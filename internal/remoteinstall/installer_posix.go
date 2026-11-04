@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/mcnull/sshex/internal/sessionfile"
@@ -26,15 +27,33 @@ func (i *PosixInstaller) Detect(ctx context.Context, conn Runner) (Platform, err
 }
 
 func (i *PosixInstaller) RemotePaths(ctx context.Context, conn Runner) (RemotePaths, error) {
+	verbosef("probing remote sshex data/runtime paths")
 	var buf bytes.Buffer
 	if err := conn.Run(ctx, pathsScript, nil, &buf, nil); err != nil {
 		return RemotePaths{}, err
 	}
-	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
-	if len(lines) != 2 || lines[0] == "" || lines[1] == "" {
-		return RemotePaths{}, fmt.Errorf("could not determine remote paths")
+	lines := strings.Split(strings.ReplaceAll(buf.String(), "\r\n", "\n"), "\n")
+	begin, end := -1, -1
+	for i, line := range lines {
+		switch strings.TrimSpace(line) {
+		case pathsBeginMarker:
+			begin = i
+		case pathsEndMarker:
+			if begin >= 0 && i > begin {
+				end = i
+			}
+		}
 	}
-	return RemotePaths{DataDir: lines[0], RunDir: lines[1]}, nil
+	if begin < 0 || end != begin+3 || strings.TrimSpace(lines[begin+1]) == "" || strings.TrimSpace(lines[begin+2]) == "" {
+		output := buf.String()
+		if len(output) > 256 {
+			output = output[:256] + "…"
+		}
+		return RemotePaths{}, fmt.Errorf("could not determine remote paths from framed probe output: %s", strconv.Quote(output))
+	}
+	paths := RemotePaths{DataDir: strings.TrimSpace(lines[begin+1]), RunDir: strings.TrimSpace(lines[begin+2])}
+	verbosef("remote paths: data=%q runtime=%q", paths.DataDir, paths.RunDir)
+	return paths, nil
 }
 
 func (i *PosixInstaller) Install(ctx context.Context, conn Runner, paths RemotePaths, platform Platform) error {

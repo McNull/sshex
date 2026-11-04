@@ -13,6 +13,7 @@ import (
 	"github.com/mcnull/sshex/internal/assets"
 	"github.com/mcnull/sshex/internal/config"
 	"github.com/mcnull/sshex/internal/updater"
+	"github.com/mcnull/sshex/internal/verbose"
 	"github.com/mcnull/sshex/internal/versioncheck"
 	"github.com/spf13/cobra"
 )
@@ -24,6 +25,8 @@ var application *app.App
 var configFlag string
 
 var versionCheck bool
+
+var verboseFlag bool
 
 // ExitError carries a command's exit code so the process can exit with it.
 type ExitError struct {
@@ -74,6 +77,10 @@ func notImplemented(cmd *cobra.Command) {
 // It runs after flag parsing so --config is available, and it exports the
 // resolved path so child processes and the runtime directory agree on it.
 func setupApplication(cmd *cobra.Command) error {
+	verbose.Set(verboseFlag || os.Getenv(verbose.EnvironmentVariable) == "1")
+	if err := verbose.SetEnvironment(); err != nil {
+		return err
+	}
 	if showBanner(cmd) {
 		printBanner(cmd.OutOrStdout())
 	}
@@ -101,7 +108,9 @@ func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Config file to use (default ~/.config/sshex/config.yml)")
 	rootCmd.PersistentFlags().BoolVar(&versionCheck, "version-check", false, "Perform online version check and exit")
+	rootCmd.PersistentFlags().BoolVar(&verboseFlag, "verbose", false, "Show daemon and SSH diagnostics")
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		verbose.Set(verboseFlag || os.Getenv(verbose.EnvironmentVariable) == "1")
 		if cmd == updateCmd || cmd == versionCheckCmd || cmd == completionsCmd {
 			// These commands do not need the application, config, or version
 			// state. Keeping them dependency-free also keeps shell startup fast

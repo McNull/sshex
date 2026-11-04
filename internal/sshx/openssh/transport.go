@@ -12,16 +12,18 @@ import (
 	"strings"
 
 	"github.com/mcnull/sshex/internal/sshx"
+	"github.com/mcnull/sshex/internal/verbose"
 )
 
 const controlDirMode = 0o700
 
 type Transport struct {
 	sshPath string
+	verbose bool
 }
 
 func NewTransport() *Transport {
-	return &Transport{sshPath: "ssh"}
+	return &Transport{sshPath: "ssh", verbose: verbose.ShouldLog()}
 }
 
 func (t *Transport) Connect(ctx context.Context, target sshx.Target, opts sshx.ConnectOptions) (sshx.Connection, error) {
@@ -47,6 +49,7 @@ func (t *Transport) Connect(ctx context.Context, target sshx.Target, opts sshx.C
 	}
 	args = append(args, extra...)
 	args = append(args, target.String())
+	t.logCommand(args)
 
 	cmd := exec.CommandContext(ctx, t.sshPath, args...)
 
@@ -89,6 +92,7 @@ func (t *Transport) Adopt(ctx context.Context, target sshx.Target, opts sshx.Con
 		return nil, fmt.Errorf("control path is required")
 	}
 	args := []string{"-S", opts.ControlPath, "-O", "check", target.String()}
+	t.logCommand(args)
 	out, err := exec.CommandContext(ctx, t.sshPath, args...).CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("adopt ssh master: %w: %s", err, strings.TrimSpace(string(out)))
@@ -109,12 +113,24 @@ func (t *Transport) Attach(target sshx.Target, opts sshx.ConnectOptions) sshx.Co
 	return &connection{sshPath: t.sshPath, controlPath: opts.ControlPath, target: target, sessionID: opts.SessionID}
 }
 
+func (t *Transport) logCommand(args []string) {
+	if !t.verbose {
+		return
+	}
+	logSSHCommand(t.sshPath, args)
+}
+
 func (c *connection) ControlPath() string { return c.controlPath }
 
 func (c *connection) Target() sshx.Target { return c.target }
 
 func (c *connection) Run(ctx context.Context, command string, stdin io.Reader, stdout, stderr io.Writer) error {
 	args := append(c.baseArgs(), command)
+	// The transport owns the verbosity setting; the connection stores the
+	// executable and can be created by Attach or Adopt, so use the same env gate.
+	if verbose.ShouldLog() {
+		logSSHCommand(c.sshPath, args)
+	}
 	cmd := exec.CommandContext(ctx, c.sshPath, args...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
@@ -160,6 +176,9 @@ func (c *connection) Shell(ctx context.Context, stdin io.Reader, stdout, stderr 
 	if command := shellCommand(c.sessionID); command != "" {
 		args = append(args, command)
 	}
+	if verbose.ShouldLog() {
+		logSSHCommand(c.sshPath, args)
+	}
 	cmd := exec.CommandContext(ctx, c.sshPath, args...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
@@ -200,11 +219,27 @@ func (c *connection) baseArgs() []string {
 
 func (c *connection) forwardOp(ctx context.Context, op, flag, spec string) error {
 	args := []string{"-S", c.controlPath, "-O", op, flag, spec, c.target.String()}
+	if verbose.ShouldLog() {
+		logSSHCommand(c.sshPath, args)
+	}
 	out, err := exec.CommandContext(ctx, c.sshPath, args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("ssh %s %s: %w: %s", op, flag, err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+func logSSHCommand(path string, args []string) {
+	fmt.Fprintf(os.Stderr, "sshex: verbose: SSH command: %s\n", formatSSHCommand(path, args))
+}
+
+func formatSSHCommand(path string, args []string) string {
+	parts := make([]string, 0, len(args)+1)
+	parts = append(parts, strconv.Quote(path))
+	for _, arg := range args {
+		parts = append(parts, strconv.Quote(arg))
+	}
+	return strings.Join(parts, " ")
 }
 
 func targetArgs(target sshx.Target) ([]string, error) {

@@ -59,6 +59,9 @@ func TestUIHelp(t *testing.T) {
 	if !strings.Contains(out.String(), "--theme") {
 		t.Fatalf("ui help is missing --theme: %q", out.String())
 	}
+	if !strings.Contains(out.String(), "--verbose") {
+		t.Fatalf("ui help is missing global --verbose: %q", out.String())
+	}
 
 	out.Reset()
 	printHelp(&out, "sshex")
@@ -70,5 +73,8 @@ func TestUIHelp(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "--theme <name>") {
 		t.Fatalf("root help is missing --theme: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "--verbose") {
+		t.Fatalf("root help is missing --verbose: %q", out.String())
 	}
 }

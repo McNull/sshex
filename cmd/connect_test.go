@@ -3,7 +3,7 @@ package cmd
 import (
 	"testing"
 
-	"github.com/mcnull/sshex/internal/sshhosts"
+	"github.com/mcnull/sshex/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -23,8 +23,8 @@ func TestConnectJumpFlag(t *testing.T) {
 func TestCompleteConnectTarget(t *testing.T) {
 	orig := resolveConnectHosts
 	t.Cleanup(func() { resolveConnectHosts = orig })
-	resolveConnectHosts = func() ([]sshhosts.Host, error) {
-		return []sshhosts.Host{
+	resolveConnectHosts = func() ([]ui.HostCompletion, error) {
+		return []ui.HostCompletion{
 			{Name: "db", Description: "db.example.com"},
 			{Name: "web"},
 			{Name: "web2", Description: "web2.example.com"},
