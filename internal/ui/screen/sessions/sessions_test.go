@@ -167,6 +167,19 @@ func TestSearchPromptAlignsWithSessionColumnAndMarksFocus(t *testing.T) {
 	}
 }
 
+func TestSelectedRowStyleFollowsFocus(t *testing.T) {
+	m := newScreen(&fakeSource{items: testSessions()}, &fakeCloser{})
+	load(t, m)
+
+	if m.selectedRowStyle().GetBold() {
+		t.Fatal("selection should be muted while the search field has focus")
+	}
+	focusSessionList(m)
+	if !m.selectedRowStyle().GetBold() {
+		t.Fatal("selection should be stronger while the list has focus")
+	}
+}
+
 func TestSortsSessionsByHostname(t *testing.T) {
 	source := &fakeSource{items: []Session{
 		{ID: "c", Host: "ssh10", Target: "carol@ssh10", State: "active"},

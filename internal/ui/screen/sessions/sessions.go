@@ -731,7 +731,7 @@ func (m *Model) row(session Session, selected bool) (string, string) {
 	second := m.detail(session, selected, inner)
 
 	if selected {
-		style := m.styles.ListRowSelected.Padding(0, 1).Width(m.width)
+		style := m.selectedRowStyle().Padding(0, 1).Width(m.width)
 		return style.Render(padRight(first, inner)), style.Render(padRight(second, inner))
 	}
 
@@ -789,6 +789,15 @@ func (m *Model) detail(session Session, selected bool, inner int) string {
 		out += s.style.Render(s.text)
 	}
 	return out
+}
+
+// selectedRowStyle uses a brighter selection while the list owns the focus and
+// a muted one while the search field does, matching the connect screen.
+func (m *Model) selectedRowStyle() lipgloss.Style {
+	if m.focus == focusList {
+		return m.styles.ListRowSelected
+	}
+	return m.styles.ListRowSelectedBlurred
 }
 
 func (m *Model) stateStyle(state string) lipgloss.Style {

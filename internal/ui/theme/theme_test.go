@@ -2,7 +2,10 @@ package theme
 
 import (
 	"fmt"
+	"slices"
 	"testing"
+
+	"charm.land/lipgloss/v2"
 )
 
 func TestLoadFallsBackToDefault(t *testing.T) {
@@ -55,8 +58,11 @@ func TestMonoAdaptsToBackground(t *testing.T) {
 
 func TestNames(t *testing.T) {
 	names := Names()
-	if len(names) == 0 || names[0] != DefaultName {
-		t.Fatalf("theme names = %v, want %q", names, DefaultName)
+	if !slices.IsSorted(names) {
+		t.Fatalf("theme names = %v, want alphabetical order", names)
+	}
+	if !slices.Contains(names, DefaultName) {
+		t.Fatalf("theme names = %v, want %q included", names, DefaultName)
 	}
 }
 
@@ -78,5 +84,59 @@ func TestThemesDiffer(t *testing.T) {
 			t.Fatalf("%q and %q share accent %s", name, other, accent)
 		}
 		seen[accent] = name
+	}
+}
+
+func TestEveryThemeResolvesInLightAndDark(t *testing.T) {
+	for _, name := range Names() {
+		for _, dark := range []bool{true, false} {
+			got := Load(Options{Name: name, HasDarkBackground: dark})
+			if got.Name != name {
+				t.Fatalf("Load(%q, dark=%v) resolved to %q", name, dark, got.Name)
+			}
+			if got.Tokens.Foreground == nil || got.Tokens.Selection == nil || got.Tokens.SelectionMuted == nil || got.Tokens.Border == nil {
+				t.Fatalf("Load(%q, dark=%v) left tokens unset", name, dark)
+			}
+		}
+	}
+}
+
+func TestBatmanUsesYellowSelection(t *testing.T) {
+	got := Load(Options{Name: "batman", HasDarkBackground: true})
+	want := fmt.Sprint(lipgloss.Color("#ffd400"))
+	if fmt.Sprint(got.Tokens.Selection) != want {
+		t.Fatalf("batman selection = %s, want #ffd400", fmt.Sprint(got.Tokens.Selection))
+	}
+	// The focused list selection matches the menu selection.
+	if fmt.Sprint(got.Tokens.SelectionFocus) != want {
+		t.Fatalf("batman focused selection = %s, want #ffd400", fmt.Sprint(got.Tokens.SelectionFocus))
+	}
+	// The selection foreground must stay readable on the yellow bar.
+	if fmt.Sprint(got.Tokens.SelectionForeground) == fmt.Sprint(got.Tokens.Foreground) {
+		t.Fatalf("batman selection foreground = %s, want a dark color distinct from the base foreground", fmt.Sprint(got.Tokens.SelectionForeground))
+	}
+}
+
+func TestBatmanMutedSelectionForBlurredLists(t *testing.T) {
+	styles := NewStyles(Load(Options{Name: "batman", HasDarkBackground: true}))
+
+	muted := fmt.Sprint(lipgloss.Color("#4a3d0e"))
+	if got := fmt.Sprint(styles.ListRowSelectedBlurred.GetBackground()); got != muted {
+		t.Fatalf("blurred selection background = %s, want the muted %s", got, muted)
+	}
+	if got := fmt.Sprint(styles.ListRowSelected.GetBackground()); got == muted {
+		t.Fatalf("focused selection background = %s, want it brighter than the blurred bar", got)
+	}
+}
+
+func TestMutedSelectionMatchesSelectionForTintedThemes(t *testing.T) {
+	for _, name := range Names() {
+		if name == "batman" {
+			continue
+		}
+		got := Load(Options{Name: name, HasDarkBackground: true})
+		if fmt.Sprint(got.Tokens.SelectionMuted) != fmt.Sprint(got.Tokens.Selection) {
+			t.Fatalf("%s: muted selection = %s, want the selection %s", name, fmt.Sprint(got.Tokens.SelectionMuted), fmt.Sprint(got.Tokens.Selection))
+		}
 	}
 }

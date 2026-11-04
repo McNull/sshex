@@ -24,6 +24,7 @@ type Tokens struct {
 	AccentForeground    color.Color
 	Selection           color.Color
 	SelectionFocus      color.Color
+	SelectionMuted      color.Color // subdued list selection while the list is unfocused
 	SelectionForeground color.Color
 	Border              color.Color
 	Success             color.Color
@@ -54,6 +55,15 @@ var palettes = map[string]paletteFunc{
 	"forest":    tinted(tint{"#8fd18f", "#16301b", "#22482a", "#2e4f33"}, tint{"#1f6b2a", "#dff0e0", "#c6e4c9", "#a8d0ad"}),
 	"amber":     tinted(tint{"#ffc266", "#3a2a10", "#57401a", "#5c4522"}, tint{"#9a5b00", "#f7ead2", "#efd9b0", "#e0c28c"}),
 	"rose":      tinted(tint{"#ff8fb8", "#3a1626", "#572239", "#5c2a40"}, tint{"#a3245a", "#f8dfe9", "#f0c4d6", "#e2a6bf"}),
+	"teal":      tinted(tint{"#5fd0c8", "#10302e", "#1b4a45", "#22564f"}, tint{"#0f766e", "#d6f1ee", "#b7e5e0", "#92d2ca"}),
+	"violet":    tinted(tint{"#c1a3ff", "#241837", "#342452", "#3d2b60"}, tint{"#6d3fb0", "#ebe0f8", "#dbc9f1", "#c8aee4"}),
+	"indigo":    tinted(tint{"#8f9cff", "#141832", "#20274f", "#283061"}, tint{"#3b45b0", "#dfe2f8", "#c4c9f1", "#a5ace4"}),
+	"crimson":   tinted(tint{"#ff8080", "#381212", "#571d1d", "#5c2222"}, tint{"#b3261e", "#f8dedd", "#f1c2c1", "#e4a2a0"}),
+	"lime":      tinted(tint{"#bde25f", "#22300c", "#334717", "#3d541d"}, tint{"#4d6a0d", "#ebf3cd", "#d9e9a9", "#c3d884"}),
+	"magenta":   tinted(tint{"#f0a0ff", "#2e1136", "#471a54", "#53215f"}, tint{"#a02eb0", "#f3dbf7", "#e8bfee", "#d59cdd"}),
+	"slate":     tinted(tint{"#a6bacf", "#1a222b", "#26313e", "#313d4b"}, tint{"#435a71", "#e1e7ed", "#cbd4de", "#afbcc9"}),
+	"sunset":    tinted(tint{"#ffa763", "#33190d", "#4d2716", "#572e1b"}, tint{"#b3540a", "#f8e2d0", "#f1ccaa", "#e5af80"}),
+	"batman":    batman,
 }
 
 // tint is the accent, selection, focused selection and border colors that
@@ -72,9 +82,35 @@ func tinted(dark, light tint) paletteFunc {
 		tokens.Accent = lipgloss.Color(t.accent)
 		tokens.Selection = lipgloss.Color(t.selection)
 		tokens.SelectionFocus = lipgloss.Color(t.focus)
+		tokens.SelectionMuted = tokens.Selection
 		tokens.Border = lipgloss.Color(t.border)
 		return tokens
 	}
+}
+
+// batman is the high-contrast black-and-yellow theme. Unlike tinted, it also
+// sets the selection foreground so the dark text stays readable on the yellow
+// bars, and a muted selection background for unfocused lists.
+func batman(isDark bool) Tokens {
+	tokens := mono(isDark)
+	if isDark {
+		tokens.Accent = lipgloss.Color("#ffd400")
+		tokens.AccentForeground = lipgloss.Color("#0b0b0b")
+		tokens.Selection = lipgloss.Color("#ffd400")
+		tokens.SelectionFocus = tokens.Selection
+		tokens.SelectionMuted = lipgloss.Color("#4a3d0e")
+		tokens.SelectionForeground = lipgloss.Color("#0b0b0b")
+		tokens.Border = lipgloss.Color("#6b5a00")
+		return tokens
+	}
+	tokens.Accent = lipgloss.Color("#8a6a00")
+	tokens.AccentForeground = lipgloss.Color("#ffffff")
+	tokens.Selection = lipgloss.Color("#ffe680")
+	tokens.SelectionFocus = tokens.Selection
+	tokens.SelectionMuted = lipgloss.Color("#ede3bb")
+	tokens.SelectionForeground = lipgloss.Color("#1a1a1a")
+	tokens.Border = lipgloss.Color("#c9ad33")
+	return tokens
 }
 
 // Load resolves a theme by name. Unknown names fall back to the default theme.
@@ -100,17 +136,14 @@ func Load(opts Options) Theme {
 	return theme
 }
 
-// Names lists the available theme names: the default first, then the rest in
-// sorted order.
+// Names lists the available theme names in alphabetical order.
 func Names() []string {
 	names := make([]string, 0, len(palettes))
 	for name := range palettes {
-		if name != DefaultName {
-			names = append(names, name)
-		}
+		names = append(names, name)
 	}
 	sort.Strings(names)
-	return append([]string{DefaultName}, names...)
+	return names
 }
 
 // mono is the default black-and-white theme: contrast, weight and spacing do
@@ -125,6 +158,7 @@ func mono(dark bool) Tokens {
 			AccentForeground:    lipgloss.Color("#0b0b0b"),
 			Selection:           lipgloss.Color("#262626"),
 			SelectionFocus:      lipgloss.Color("#3f3f3f"),
+			SelectionMuted:      lipgloss.Color("#262626"),
 			SelectionForeground: lipgloss.Color("#ffffff"),
 			Border:              lipgloss.Color("#3a3a3a"),
 			Success:             lipgloss.Color("#7ac77a"),
@@ -140,6 +174,7 @@ func mono(dark bool) Tokens {
 		AccentForeground:    lipgloss.Color("#ffffff"),
 		Selection:           lipgloss.Color("#e6e6e6"),
 		SelectionFocus:      lipgloss.Color("#d0d0d0"),
+		SelectionMuted:      lipgloss.Color("#e6e6e6"),
 		SelectionForeground: lipgloss.Color("#111111"),
 		Border:              lipgloss.Color("#cccccc"),
 		Success:             lipgloss.Color("#2f7d32"),
@@ -226,7 +261,7 @@ func NewStyles(t Theme) Styles {
 			Bold(true),
 		ListRowSelectedBlurred: lipgloss.NewStyle().
 			Foreground(t.Tokens.Muted).
-			Background(t.Tokens.Selection),
+			Background(t.Tokens.SelectionMuted),
 		ListHeader:      lipgloss.NewStyle().Foreground(t.Tokens.Muted).Bold(true),
 		ListMarker:      lipgloss.NewStyle().Foreground(t.Tokens.Accent).Bold(true),
 		ListDescription: lipgloss.NewStyle().Foreground(t.Tokens.Muted),

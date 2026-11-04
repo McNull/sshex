@@ -54,7 +54,7 @@ func (m Model) View() string {
 		return ""
 	}
 
-	brand := m.styles.Brand.Render("sshe") + m.styles.BrandAccent.Render("x")
+	brand := m.styles.Brand.Render("ssh") + m.styles.BrandAccent.Render("ex")
 	brand += m.styles.HeaderLabel.Render(": ") + m.styles.Version.Render(m.version)
 
 	var identity strings.Builder

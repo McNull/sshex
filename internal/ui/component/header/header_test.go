@@ -29,7 +29,7 @@ func TestViewRightAlignsIdentity(t *testing.T) {
 	if !strings.HasPrefix(ansi.Strip(line), "sshex: v0.4.6") {
 		t.Fatalf("header line = %q, want sshex version at left", ansi.Strip(line))
 	}
-	if !strings.Contains(line, styles.Brand.Render("sshe")+styles.BrandAccent.Render("x")) {
+	if !strings.Contains(line, styles.Brand.Render("ssh")+styles.BrandAccent.Render("ex")) {
 		t.Fatal("sshex wordmark is not rendered with the brand style")
 	}
 	if !strings.Contains(line, styles.Version.Render("v0.4.6")) {

@@ -59,9 +59,11 @@ Running `sshex` without arguments opens the full-screen terminal interface, as
 does `sshex ui`. Outside a session, the Server menu opens Connect, Sessions,
 Tunnels, Commands, Update and Themes. Inside an sshex session, the Client menu opens the
 current session's Tunnels and Commands; its Server entry manages the machine
-running the UI as its own origin. Themes are `mono` (default), `amber`,
-`forest`, `ocean` and `rose`; pick one with `--theme` or from the Themes menu.
-Every theme adapts to light and dark terminals and respects `NO_COLOR`.
+running the UI as its own origin. Themes are `amber`, `batman`, `crimson`,
+`forest`, `indigo`, `lime`, `magenta`, `mono` (default), `ocean`, `rose`,
+`slate`, `sunset`, `teal` and `violet`; pick one with `--theme` or from the
+Themes menu. Every theme adapts to light and dark terminals and respects
+`NO_COLOR`.
 
 ```sh
 $ sshex
