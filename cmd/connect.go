@@ -34,21 +34,8 @@ var connectCmd = &cobra.Command{
 		noCompletions, _ := cmd.Flags().GetBool("no-completions")
 
 		out := cmd.OutOrStdout()
-		sp := startSpinner(out, "installing remote sshex command...")
+		sp := startSpinner(out, "connecting to remote...")
 		defer func() { sp.Stop() }()
-
-		var broker daemon.RuntimeInfo
-		var err error
-		if verbose.ShouldLog() {
-			fmt.Fprintln(cmd.ErrOrStderr(), "sshex: verbose: ensuring local daemon")
-			broker, err = daemon.EnsureVerbose(cmd.Context(), os.Getenv("SSHEX_CONFIG"), cmd.ErrOrStderr())
-		} else {
-			broker, err = daemon.Ensure(cmd.Context(), os.Getenv("SSHEX_CONFIG"))
-		}
-		if err != nil {
-			return err
-		}
-		c := client.NewForEndpoint(broker.Endpoint, broker.Token)
 
 		if port == 0 {
 			port = 22
@@ -75,10 +62,10 @@ var connectCmd = &cobra.Command{
 		sp.Stop()
 		verbosef(cmd.ErrOrStderr(), "establishing SSH master for %s", target.String())
 
-		master, err := application.Transport.Connect(cmd.Context(), target, sshx.ConnectOptions{
+		master, broker, err := establishMasterAndEnsureBroker(cmd.Context(), target, sshx.ConnectOptions{
 			ControlPath: controlPath,
 			Stderr:      os.Stderr,
-		})
+		}, os.Getenv("SSHEX_CONFIG"), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
@@ -90,6 +77,7 @@ var connectCmd = &cobra.Command{
 		}()
 
 		sp = startSpinner(out, "installing remote sshex command...")
+		c := client.NewForEndpoint(broker.Endpoint, broker.Token)
 		verbosef(cmd.ErrOrStderr(), "requesting remote install/session setup")
 
 		result, err := c.CreateSession(cmd.Context(), api.CreateSessionRequest{
@@ -141,6 +129,33 @@ var connectCmd = &cobra.Command{
 		}
 		return shellErr
 	},
+}
+
+// ensureConnectBroker starts or reuses the local daemon after SSH has connected.
+// This avoids leaving an idle daemon behind when the target is unreachable.
+var ensureConnectBroker = func(ctx context.Context, configPath string, log io.Writer) (daemon.RuntimeInfo, error) {
+	if verbose.ShouldLog() {
+		fmt.Fprintln(log, "sshex: verbose: ensuring local daemon")
+		return daemon.EnsureVerbose(ctx, configPath, log)
+	}
+	return daemon.Ensure(ctx, configPath)
+}
+
+var establishConnectMaster = func(ctx context.Context, target sshx.Target, opts sshx.ConnectOptions) (sshx.Connection, error) {
+	return application.Transport.Connect(ctx, target, opts)
+}
+
+func establishMasterAndEnsureBroker(ctx context.Context, target sshx.Target, opts sshx.ConnectOptions, configPath string, log io.Writer) (sshx.Connection, daemon.RuntimeInfo, error) {
+	master, err := establishConnectMaster(ctx, target, opts)
+	if err != nil {
+		return nil, daemon.RuntimeInfo{}, err
+	}
+	broker, err := ensureConnectBroker(ctx, configPath, log)
+	if err != nil {
+		_ = master.Close(context.Background())
+		return nil, daemon.RuntimeInfo{}, err
+	}
+	return master, broker, nil
 }
 
 func verbosef(w io.Writer, format string, args ...any) {

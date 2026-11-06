@@ -17,6 +17,8 @@ import (
 
 const controlDirMode = 0o700
 
+const defaultConnectTimeout = "10"
+
 type Transport struct {
 	sshPath string
 	verbose bool
@@ -35,20 +37,10 @@ func (t *Transport) Connect(ctx context.Context, target sshx.Target, opts sshx.C
 	}
 	_ = os.Remove(opts.ControlPath)
 
-	args := []string{
-		"-M",
-		"-S", opts.ControlPath,
-		"-N",
-		"-f",
-		"-o", "ExitOnForwardFailure=yes",
-		"-o", "ControlMaster=yes",
-	}
-	extra, err := targetArgs(target)
+	args, err := connectArgs(target, opts.ControlPath)
 	if err != nil {
 		return nil, err
 	}
-	args = append(args, extra...)
-	args = append(args, target.String())
 	t.logCommand(args)
 
 	cmd := exec.CommandContext(ctx, t.sshPath, args...)
@@ -82,6 +74,64 @@ func (t *Transport) Connect(ctx context.Context, target sshx.Target, opts sshx.C
 	}
 
 	return &connection{sshPath: t.sshPath, controlPath: opts.ControlPath, target: target, sessionID: opts.SessionID}, nil
+}
+
+func connectArgs(target sshx.Target, controlPath string) ([]string, error) {
+	args := []string{
+		"-M",
+		"-S", controlPath,
+		"-N",
+		"-f",
+		"-o", "ExitOnForwardFailure=yes",
+		"-o", "ControlMaster=yes",
+	}
+	extra, err := targetArgs(target)
+	if err != nil {
+		return nil, err
+	}
+	args = append(args, extra...)
+	if !hasConnectTimeoutOption(target.Options) {
+		args = append(args, "-o", "ConnectTimeout="+defaultConnectTimeout)
+	}
+	args = append(args, target.String())
+	return args, nil
+}
+
+// hasConnectTimeoutOption reports whether the caller supplied an explicit
+// ConnectTimeout through either sshex's key=value option or raw ssh arguments.
+func hasConnectTimeoutOption(options []string) bool {
+	for _, option := range options {
+		if !strings.HasPrefix(option, "-") {
+			if isConnectTimeout(option) {
+				return true
+			}
+			continue
+		}
+		tokens, err := sshx.SplitArgs(option)
+		if err != nil {
+			continue
+		}
+		for i := 0; i < len(tokens); i++ {
+			token := tokens[i]
+			switch {
+			case token == "-o" && i+1 < len(tokens):
+				i++
+				if isConnectTimeout(tokens[i]) {
+					return true
+				}
+			case strings.HasPrefix(token, "-o") && len(token) > 2:
+				if isConnectTimeout(token[2:]) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func isConnectTimeout(option string) bool {
+	key, _, ok := strings.Cut(option, "=")
+	return ok && strings.EqualFold(strings.TrimSpace(key), "ConnectTimeout")
 }
 
 // Adopt reuses an existing control master established by another process (for

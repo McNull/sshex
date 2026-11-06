@@ -60,6 +60,68 @@ func TestTargetArgs(t *testing.T) {
 	}
 }
 
+func TestConnectArgsUsesDefaultTimeout(t *testing.T) {
+	got, err := connectArgs(sshx.Target{Host: "ssh02"}, "/tmp/master.ctl")
+	if err != nil {
+		t.Fatalf("connectArgs() error: %v", err)
+	}
+	if !hasArgumentPair(got, "-o", "ConnectTimeout=10") {
+		t.Fatalf("connectArgs() = %v, want default ConnectTimeout=10", got)
+	}
+}
+
+func TestConnectArgsPreservesExplicitTimeout(t *testing.T) {
+	tests := []struct {
+		name    string
+		options []string
+		want    string
+	}{
+		{name: "key value", options: []string{"ConnectTimeout=3"}, want: "ConnectTimeout=3"},
+		{name: "raw separated option", options: []string{"-o ConnectTimeout=4"}, want: "ConnectTimeout=4"},
+		{name: "raw combined option", options: []string{"-oConnectTimeout=5"}, want: "ConnectTimeout=5"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := connectArgs(sshx.Target{Host: "ssh02", Options: tc.options}, "/tmp/master.ctl")
+			if err != nil {
+				t.Fatalf("connectArgs() error: %v", err)
+			}
+			if !hasSSHOption(got, tc.want) {
+				t.Fatalf("connectArgs() = %v, want explicit %s", got, tc.want)
+			}
+			if hasSSHOption(got, "ConnectTimeout=10") {
+				t.Fatalf("connectArgs() = %v, unexpectedly includes default timeout", got)
+			}
+		})
+	}
+}
+
+func hasArgumentPair(args []string, flag, value string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == flag && args[i+1] == value {
+			return true
+		}
+	}
+	return false
+}
+
+func hasSSHOption(args []string, option string) bool {
+	for i := 0; i < len(args); i++ {
+		token := args[i]
+		if token == "-o" && i+1 < len(args) {
+			i++
+			if args[i] == option {
+				return true
+			}
+			continue
+		}
+		if strings.HasPrefix(token, "-o") && len(token) > 2 && token[2:] == option {
+			return true
+		}
+	}
+	return false
+}
+
 func TestFormatSSHCommandQuotesArguments(t *testing.T) {
 	got := formatSSHCommand("ssh", []string{"-p", "222", "alice@node a.example.test"})
 	want := `"ssh" "-p" "222" "alice@node a.example.test"`
